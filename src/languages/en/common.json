@@ -1,0 +1,10 @@
+{
+  "create": "create success",
+  "update": "update success",
+  "delete": "delete success",
+  "get": "get success",
+  "list": "list success",
+  "error": {
+    "notFound": "not found"
+  }
+}

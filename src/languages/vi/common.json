@@ -1,0 +1,10 @@
+{
+  "create": "tạo thành công",
+  "update": "cập nhật thành công",
+  "delete": "xóa thành công",
+  "get": "lấy thành công",
+  "list": "danh sách thành công",
+  "error": {
+    "notFound": "không tìm thấy"
+  }
+}
