@@ -1,0 +1,2 @@
+export const APP_STATUS_CODE_SUCCESS = 200;
+export const APP_STATUS_CODE_ERROR_UNKNOWN = 500;

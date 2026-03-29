@@ -1,4 +1,4 @@
-import { VersioningType } from '@nestjs/common';
+import { Logger, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { useContainer } from 'class-validator';
@@ -20,6 +20,9 @@ async function bootstrap() {
   });
 
   await app.listen(port);
+
+  const logger = new Logger('Bootstrap');
+  logger.log(`Application is running on port ${port}`);
 }
 
 bootstrap();
