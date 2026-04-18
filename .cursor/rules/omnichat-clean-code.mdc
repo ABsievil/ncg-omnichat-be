@@ -1,0 +1,27 @@
+---
+description: Luon ap dung clean code style cua Omnichat backend
+alwaysApply: true
+---
+
+# Omnichat Clean Code Rule
+
+Ap dung rule nay cho moi session moi trong repository nay.
+
+## Bat buoc truoc khi code
+
+- Doc file `refs/docs/AI_CLEAN_CODE_RULES.md` va tuan thu day du.
+- Neu co xung dot, uu tien quy tac trong file tren.
+
+## Quy tac thuc thi
+
+- Khong tao file `util` chung chung cho business flow.
+- Dat constants/enums/interfaces dung domain folder.
+- Middleware va filter phai tach bach trach nhiem, cau hinh qua `ConfigService`.
+- Moi env key moi phai cap nhat dong bo vao `.env.example`.
+- Khong dung naming domain ngoai Omnichat (vi du: crm, shop) neu khong duoc yeu cau ro rang.
+- Sau thay doi lon, luon build/type-check va sua het loi phat sinh.
+
+## Cach tra loi uu tien
+
+- De xuat theo huong clean architecture, de doc, de bao tri.
+- Neu co nhieu cach lam, uu tien pattern da ton tai trong codebase nay.
