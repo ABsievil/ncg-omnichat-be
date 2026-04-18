@@ -6,6 +6,7 @@ export interface IResponseMetadata {
   timezone?: string;
   path?: string;
   version?: string;
+  release?: string;
   repoVersion?: string;
   pagination?: Record<string, unknown>;
   customProperty?: {
@@ -16,11 +17,15 @@ export interface IResponseMetadata {
   };
 }
 
+export type AppExceptionErrors =
+  | ValidationError[]
+  | Record<string, unknown>[];
+
 export interface IAppException {
   statusCode: number;
   errorCode?: number;
   message: string;
-  errors?: ValidationError[];
+  errors?: AppExceptionErrors;
   data?: Record<string, unknown>;
   _metadata?: IResponseMetadata;
 }

@@ -6,4 +6,5 @@ export default registerAs('app', () => ({
   port: parseInt(process.env.PORT as string, 10),
   apiPrefix: process.env.API_PREFIX,
   apiVersion: process.env.API_VERSION,
+  release: process.env.APP_RELEASE ?? '0.0.1',
 }));
