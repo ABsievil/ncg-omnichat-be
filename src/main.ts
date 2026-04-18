@@ -5,7 +5,7 @@ import { useContainer } from 'class-validator';
 import { AppModule } from 'src/app/app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const configService = app.get(ConfigService);
   const apiPrefix = configService.get<string>('app.apiPrefix') ?? 'api';
   const apiVersion = configService.get<string>('app.apiVersion') ?? '1';

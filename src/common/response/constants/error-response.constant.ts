@@ -10,4 +10,5 @@ export const APP_CONFIG_KEY = {
   API_PREFIX: 'app.apiPrefix',
   API_VERSION: 'app.apiVersion',
   RELEASE: 'app.release',
+  ENV: 'app.env',
 } as const;
