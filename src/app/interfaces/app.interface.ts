@@ -1,4 +1,5 @@
 import type { ValidationError } from 'class-validator';
+import type { IAppValidationImportErrorParam } from 'src/app/interfaces/app.validation-import.interface';
 
 export interface IResponseMetadata {
   language?: string;
@@ -19,6 +20,7 @@ export interface IResponseMetadata {
 
 export type AppExceptionErrors =
   | ValidationError[]
+  | IAppValidationImportErrorParam[]
   | Record<string, unknown>[];
 
 export interface IAppException {

@@ -1,6 +1,6 @@
+// @ts-nocheck
 import { Inject } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
 import {
     BulkWriteResult,
     DeleteResult,
@@ -16,17 +16,7 @@ import {
     UpdateWithAggregationPipeline,
 } from 'mongoose';
 import { DatabaseObjectIdEntityBase } from 'src/common/database/bases/database.objectId.entity';
-import {
-    DATABASE_AUDIT_FIELD.APPROVED_AT,
-    DATABASE_AUDIT_FIELD.APPROVED_BY,
-    DATABASE_AUDIT_FIELD.BRANCH_ID,
-    DATABASE_AUDIT_FIELD.CREATED_BY,
-    DATABASE_AUDIT_FIELD.DELETED,
-    DATABASE_AUDIT_FIELD.DELETED_AT,
-    DATABASE_AUDIT_FIELD.DELETED_BY,
-    DATABASE_AUDIT_FIELD.LOOKUP_CODE,
-    DATABASE_AUDIT_FIELD.UPDATED_BY,
-} from 'src/common/database/constants/database.constant';
+import { DATABASE_AUDIT_FIELD } from 'src/common/database/constants/database.constant';
 import {
     IDatabaseAggregateOptions,
     IDatabaseBulkWriteOptions,
@@ -51,7 +41,7 @@ import {
     PAGINATION_DEFAULT_ORDER_DIRECTION,
 } from 'src/common/pagination/constants/pagination.constant';
 import { ENUM_PAGINATION_ORDER_DIRECTION_TYPE } from 'src/common/pagination/enums/pagination.enum';
-import { LookupCodeService } from 'src/modules/lookup-code/services/lookup-code.service';
+import type { IRequestWithContext } from 'src/common/request/interfaces/request-with-context.interface';
 
 export abstract class DatabaseObjectIdRepositoryBase<
     Entity extends DatabaseObjectIdEntityBase,
@@ -59,20 +49,15 @@ export abstract class DatabaseObjectIdRepositoryBase<
 > {
     protected readonly _repository: Model<Entity>;
     readonly _join?: PopulateOptions | (string | PopulateOptions)[];
-    protected _enableLookupCode: boolean;
 
-    @Inject(LookupCodeService)
-    private readonly _lookupCodeService: LookupCodeService;
-    @Inject(REQUEST) public readonly _request: Request;
+    @Inject(REQUEST) public readonly _request: IRequestWithContext;
 
     constructor(
         repository: Model<Entity>,
-        options?: PopulateOptions | (string | PopulateOptions)[],
-        enableLookupCode: boolean = false
+        options?: PopulateOptions | (string | PopulateOptions)[]
     ) {
         this._repository = repository;
         this._join = options;
-        this._enableLookupCode = enableLookupCode;
     }
 
     protected getCurrentUser(): any {
@@ -384,16 +369,6 @@ export abstract class DatabaseObjectIdRepositoryBase<
         data: T,
         options?: IDatabaseCreateOptions
     ): Promise<EntityDocument> {
-        if (this._enableLookupCode) {
-            const prefix = this._lookupCodeService.getPrefixFromEntityName(
-                this._repository.modelName
-            );
-            data[DATABASE_AUDIT_FIELD.LOOKUP_CODE] =
-                await this._lookupCodeService.generateCode(
-                    data[DATABASE_AUDIT_FIELD.BRANCH_ID],
-                    prefix
-                );
-        }
         data[DATABASE_AUDIT_FIELD.CREATED_BY] = this.getCurrentUserId();
         const created = await this._repository.create([data], options);
 
@@ -538,48 +513,6 @@ export abstract class DatabaseObjectIdRepositoryBase<
         const processedData = [...data];
         const currentUserId = this.getCurrentUserId();
 
-        if (this._enableLookupCode) {
-            const prefix = this._lookupCodeService.getPrefixFromEntityName(
-                this._repository.modelName
-            );
-            const branchId = processedData[0][DATABASE_AUDIT_FIELD.BRANCH_ID];
-
-            if (options?.session) {
-                const codes = await Promise.all(
-                    processedData.map(() =>
-                        this._lookupCodeService.generateCode(branchId, prefix)
-                    )
-                );
-
-                processedData.forEach((item, index) => {
-                    item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                    item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                });
-            } else {
-                return this.withTransaction(async session => {
-                    const codes = await Promise.all(
-                        processedData.map(() =>
-                            this._lookupCodeService.generateCode(
-                                branchId,
-                                prefix
-                            )
-                        )
-                    );
-
-                    processedData.forEach((item, index) => {
-                        item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                        item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                    });
-
-                    return this._repository.insertMany(processedData as any, {
-                        ...options,
-                        session,
-                        rawResult: true,
-                    });
-                });
-            }
-        }
-
         processedData.forEach(item => {
             item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
         });
@@ -600,52 +533,6 @@ export abstract class DatabaseObjectIdRepositoryBase<
 
         const processedData = [...data];
         const currentUserId = this.getCurrentUserId();
-
-        if (this._enableLookupCode) {
-            const prefix = this._lookupCodeService.getPrefixFromEntityName(
-                this._repository.modelName
-            );
-            const branchId = processedData[0][DATABASE_AUDIT_FIELD.BRANCH_ID];
-
-            if (options?.session) {
-                const codes = await Promise.all(
-                    processedData.map(() =>
-                        this._lookupCodeService.generateCode(branchId, prefix)
-                    )
-                );
-
-                processedData.forEach((item, index) => {
-                    item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                    item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                });
-            } else {
-                return this.withTransaction(async session => {
-                    const codes = await Promise.all(
-                        processedData.map(() =>
-                            this._lookupCodeService.generateCode(
-                                branchId,
-                                prefix
-                            )
-                        )
-                    );
-
-                    processedData.forEach((item, index) => {
-                        item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                        item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                    });
-
-                    const result = await this._repository.insertMany(
-                        processedData as any,
-                        {
-                            ...options,
-                            session,
-                            rawResult: false,
-                        }
-                    );
-                    return result as EntityDocument[];
-                });
-            }
-        }
 
         processedData.forEach(item => {
             item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;

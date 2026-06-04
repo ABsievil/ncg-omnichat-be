@@ -1,13 +1,19 @@
-import { HttpStatus, UnprocessableEntityException } from '@nestjs/common';
-import type { ValidationError } from 'class-validator';
-import { ExceptionMessagePath } from 'src/common/response/enums/exception-message-path.enum';
+import { HttpStatus } from '@nestjs/common';
+import { ValidationError } from 'class-validator';
+import { ENUM_REQUEST_STATUS_CODE_ERROR } from 'src/common/request/enums/request.status-code.enum';
 
-export class RequestValidationException extends UnprocessableEntityException {
-  constructor(public readonly errors: ValidationError[]) {
-    super({
-      statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
-      message: ExceptionMessagePath.RequestValidation,
-      errors,
-    });
-  }
+export class RequestValidationException extends Error {
+    readonly httpStatus: HttpStatus = HttpStatus.BAD_REQUEST;
+    readonly statusCode: number = ENUM_REQUEST_STATUS_CODE_ERROR.VALIDATION;
+    readonly errors: ValidationError[];
+
+    constructor(errors: ValidationError[]) {
+        super('request.validation');
+
+        this.errors = errors;
+    }
+
+    getStatus(): HttpStatus {
+        return this.httpStatus;
+    }
 }

@@ -1,0 +1,4 @@
+export enum ENUM_APP_STATUS_CODE_ERROR {
+  UNKNOWN = 5000,
+  VALIDATION = 4000,
+}

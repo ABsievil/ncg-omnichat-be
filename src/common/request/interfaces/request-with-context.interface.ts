@@ -4,4 +4,7 @@ export interface IRequestWithContext extends Request {
   __language?: string;
   __version?: string;
   requestId?: string;
+  user?: {
+    _id: string;
+  };
 }

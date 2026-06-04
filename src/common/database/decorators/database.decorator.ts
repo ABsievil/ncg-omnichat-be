@@ -9,7 +9,7 @@ import {
     SchemaOptions,
 } from '@nestjs/mongoose';
 import { Schema as MongooseSchema } from 'mongoose';
-import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.constant';
+import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.connection.constant';
 import { IDatabaseQueryContainOptions } from 'src/common/database/interfaces/database.interface';
 
 export function InjectDatabaseConnection(

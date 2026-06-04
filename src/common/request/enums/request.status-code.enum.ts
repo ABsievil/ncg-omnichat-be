@@ -1,0 +1,4 @@
+export enum ENUM_REQUEST_STATUS_CODE_ERROR {
+    VALIDATION = 400,
+    TIMEOUT = 5031,
+}

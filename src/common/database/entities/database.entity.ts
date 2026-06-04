@@ -1,10 +1,10 @@
+import { v4 as uuidV4 } from 'uuid';
 import { DatabaseProp } from 'src/common/database/decorators/database.decorator';
-import { SnowflakeService } from 'src/common/snowflake/services/snowflake.service';
 
 export class DatabaseEntityBase {
     @DatabaseProp({
         type: String,
-        default: () => SnowflakeService.generateId(),
+        default: () => uuidV4(),
     })
     _id: string;
 

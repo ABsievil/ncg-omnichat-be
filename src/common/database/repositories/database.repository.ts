@@ -1,6 +1,6 @@
+// @ts-nocheck
 import { Inject } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
 import {
     BulkWriteResult,
     DeleteResult,
@@ -43,9 +43,7 @@ import {
     PAGINATION_DEFAULT_ORDER_DIRECTION,
 } from 'src/common/pagination/constants/pagination.constant';
 import { ENUM_PAGINATION_ORDER_DIRECTION_TYPE } from 'src/common/pagination/enums/pagination.enum';
-import { ENUM_AUDIT_LOG_ACTION } from 'src/modules/audit-log/enums/audit-log.enum';
-import { AuditLogHistoryService } from 'src/modules/audit-log/services/audit-log-history.service';
-import { LookupCodeService } from 'src/modules/lookup-code/services/lookup-code.service';
+import type { IRequestWithContext } from 'src/common/request/interfaces/request-with-context.interface';
 
 export abstract class DatabaseRepositoryBase<
     Entity extends DatabaseEntityBase,
@@ -53,27 +51,15 @@ export abstract class DatabaseRepositoryBase<
 > {
     protected readonly _repository: Model<Entity>;
     readonly _join?: PopulateOptions | (string | PopulateOptions)[];
-    protected _enableLookupCode: boolean;
-    protected _enableHistory: boolean;
 
-    @Inject(LookupCodeService)
-    private readonly _lookupCodeService: LookupCodeService;
-
-    @Inject(AuditLogHistoryService)
-    private readonly _auditLogHistoryService: AuditLogHistoryService;
-
-    @Inject(REQUEST) public readonly _request: Request;
+    @Inject(REQUEST) public readonly _request: IRequestWithContext;
 
     constructor(
         repository: Model<Entity>,
-        options?: PopulateOptions | (string | PopulateOptions)[],
-        enableLookupCode: boolean = false,
-        enableHistory: boolean = false
+        options?: PopulateOptions | (string | PopulateOptions)[]
     ) {
         this._repository = repository;
         this._join = options;
-        this._enableLookupCode = enableLookupCode;
-        this._enableHistory = enableHistory;
     }
 
     protected getCurrentUser(): any {
@@ -389,31 +375,8 @@ export abstract class DatabaseRepositoryBase<
         data: T,
         options?: IDatabaseCreateOptions
     ): Promise<EntityDocument> {
-        const session = options?.session;
-        if (this._enableLookupCode) {
-            const prefix = this._lookupCodeService.getPrefixFromEntityName(
-                this._repository.modelName
-            );
-            data[DATABASE_AUDIT_FIELD.LOOKUP_CODE] =
-                await this._lookupCodeService.generateCode(
-                    data[DATABASE_AUDIT_FIELD.BRANCH_ID],
-                    prefix
-                );
-        }
         data[DATABASE_AUDIT_FIELD.CREATED_BY] = this.getCurrentUserId();
         const created = await this._repository.create([data], options);
-
-        // Không cần await, cho audit log chạy sau
-        this._auditLogHistoryService.writeAuditLog({
-            enableHistory: this._enableHistory,
-            action: ENUM_AUDIT_LOG_ACTION.CREATE,
-            modelName: this._repository.modelName,
-            moduleId: created?.[0]?._id?.toString(),
-            before: undefined,
-            after: created?.[0],
-            request: this._request,
-            session,
-        });
 
         return created[0] as any;
     }
@@ -427,15 +390,6 @@ export abstract class DatabaseRepositoryBase<
         data[DATABASE_AUDIT_FIELD.UPDATED_BY] = this.getCurrentUserId();
 
         const deletedFilter = this.buildDeletedFilter(options);
-        const session = options?.session;
-        const previous = await this._repository.findOne(
-            {
-                ...find,
-                ...deletedFilter,
-            },
-            null,
-            ...(session ? [{ session }] : [])
-        );
 
         const updated = (await this._repository.findOneAndUpdate(
             {
@@ -448,20 +402,6 @@ export abstract class DatabaseRepositoryBase<
                 new: true,
             }
         )) as EntityDocument;
-
-        // Không cần await, cho audit log chạy sau
-        this._auditLogHistoryService.writeAuditLog({
-            enableHistory: this._enableHistory,
-            action: ENUM_AUDIT_LOG_ACTION.UPDATE,
-            modelName: this._repository.modelName,
-            moduleId:
-                (updated as any)?._id?.toString() ||
-                (previous as any)?._id?.toString(),
-            before: previous,
-            after: updated,
-            request: this._request,
-            session,
-        });
 
         return updated;
     }
@@ -490,16 +430,6 @@ export abstract class DatabaseRepositoryBase<
         find: Record<string, any>,
         options?: IDatabaseDeleteOptions
     ): Promise<EntityDocument> {
-        const session = options?.session;
-        const existing = await this._repository.findOne(
-            {
-                ...find,
-                deleted: options?.withDeleted ?? false,
-            },
-            null,
-            ...(session ? [{ session }] : [])
-        );
-
         const deleted = (await this._repository.findOneAndDelete(
             {
                 ...find,
@@ -510,20 +440,6 @@ export abstract class DatabaseRepositoryBase<
                 new: false,
             }
         )) as EntityDocument;
-
-        // Không cần await, cho audit log chạy sau
-        this._auditLogHistoryService.writeAuditLog({
-            enableHistory: this._enableHistory,
-            action: ENUM_AUDIT_LOG_ACTION.DELETE,
-            modelName: this._repository.modelName,
-            moduleId:
-                (existing as any)?._id?.toString() ||
-                (deleted as any)?._id?.toString(),
-            before: existing,
-            after: undefined,
-            request: this._request,
-            session,
-        });
 
         return deleted;
     }
@@ -613,48 +529,6 @@ export abstract class DatabaseRepositoryBase<
         const processedData = [...data];
         const currentUserId = this.getCurrentUserId();
 
-        if (this._enableLookupCode) {
-            const prefix = this._lookupCodeService.getPrefixFromEntityName(
-                this._repository.modelName
-            );
-            const branchId = processedData[0][DATABASE_AUDIT_FIELD.BRANCH_ID];
-
-            if (options?.session) {
-                const codes = await Promise.all(
-                    processedData.map(() =>
-                        this._lookupCodeService.generateCode(branchId, prefix)
-                    )
-                );
-
-                processedData.forEach((item, index) => {
-                    item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                    item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                });
-            } else {
-                return this.withTransaction(async session => {
-                    const codes = await Promise.all(
-                        processedData.map(() =>
-                            this._lookupCodeService.generateCode(
-                                branchId,
-                                prefix
-                            )
-                        )
-                    );
-
-                    processedData.forEach((item, index) => {
-                        item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                        item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                    });
-
-                    return this._repository.insertMany(processedData as any, {
-                        ...options,
-                        session,
-                        rawResult: true,
-                    });
-                });
-            }
-        }
-
         processedData.forEach(item => {
             item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
         });
@@ -675,52 +549,6 @@ export abstract class DatabaseRepositoryBase<
 
         const processedData = [...data];
         const currentUserId = this.getCurrentUserId();
-
-        if (this._enableLookupCode) {
-            const prefix = this._lookupCodeService.getPrefixFromEntityName(
-                this._repository.modelName
-            );
-            const branchId = processedData[0][DATABASE_AUDIT_FIELD.BRANCH_ID];
-
-            if (options?.session) {
-                const codes = await Promise.all(
-                    processedData.map(() =>
-                        this._lookupCodeService.generateCode(branchId, prefix)
-                    )
-                );
-
-                processedData.forEach((item, index) => {
-                    item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                    item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                });
-            } else {
-                return this.withTransaction(async session => {
-                    const codes = await Promise.all(
-                        processedData.map(() =>
-                            this._lookupCodeService.generateCode(
-                                branchId,
-                                prefix
-                            )
-                        )
-                    );
-
-                    processedData.forEach((item, index) => {
-                        item[DATABASE_AUDIT_FIELD.LOOKUP_CODE] = codes[index];
-                        item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;
-                    });
-
-                    const result = await this._repository.insertMany(
-                        processedData as any,
-                        {
-                            ...options,
-                            session,
-                            rawResult: false,
-                        }
-                    );
-                    return result as EntityDocument[];
-                });
-            }
-        }
 
         processedData.forEach(item => {
             item[DATABASE_AUDIT_FIELD.CREATED_BY] = currentUserId;

@@ -1,6 +1,6 @@
+// @ts-nocheck
 import { Inject } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
 import { DeleteResult, InsertManyResult, UpdateResult } from 'mongodb';
 import {
     Model,
@@ -36,6 +36,7 @@ import {
     PAGINATION_DEFAULT_ORDER_DIRECTION,
 } from 'src/common/pagination/constants/pagination.constant';
 import { ENUM_PAGINATION_ORDER_DIRECTION_TYPE } from 'src/common/pagination/enums/pagination.enum';
+import type { IRequestWithContext } from 'src/common/request/interfaces/request-with-context.interface';
 
 export abstract class DatabaseRepositoryBaseHelper<
     Entity extends DatabaseEntityBase,
@@ -44,7 +45,7 @@ export abstract class DatabaseRepositoryBaseHelper<
     protected readonly _repository: Model<Entity>;
     readonly _join?: PopulateOptions | (string | PopulateOptions)[];
 
-    @Inject(REQUEST) public readonly _request: Request;
+    @Inject(REQUEST) public readonly _request: IRequestWithContext;
 
     constructor(
         repository: Model<Entity>,

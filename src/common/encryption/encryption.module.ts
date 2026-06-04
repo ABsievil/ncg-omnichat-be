@@ -1,4 +1,13 @@
-import { Module } from '@nestjs/common';
+import { DynamicModule } from '@nestjs/common';
 
-@Module({})
-export class EncryptionModule {}
+export class EncryptionModule {
+    static forRoot(): DynamicModule {
+        return {
+            module: EncryptionModule,
+            providers: [],
+            exports: [],
+            imports: [],
+            controllers: [],
+        };
+    }
+}

@@ -3,10 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MongooseModuleOptions } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { ENUM_APP_ENVIRONMENT } from 'src/app/enums/app.enum';
-import {
-    DATABASE_CONFIG_PATH,
-    DATABASE_CONNECTION_NAME,
-} from 'src/common/database/constants/database.constant';
+import { DATABASE_CONFIG_PATH } from 'src/common/database/constants/database.constant';
 import { IDatabaseOptionService } from 'src/common/database/interfaces/database.option-service.interface';
 
 const APP_ENV_CONFIG_PATH = 'app.env';
@@ -30,7 +27,6 @@ export class DatabaseOptionService implements IDatabaseOptionService {
         }
 
         const mongooseOptions: MongooseModuleOptions = {
-            connectionName: DATABASE_CONNECTION_NAME,
             uri: url,
             autoCreate: env !== ENUM_APP_ENVIRONMENT.PRODUCTION,
             autoIndex: env !== ENUM_APP_ENVIRONMENT.PRODUCTION,

@@ -8,7 +8,6 @@ import {
 } from '@nestjs/throttler';
 import { AppMiddlewareModule } from 'src/app/app.middleware.module';
 import { CommonModule } from 'src/common/common.module';
-import { EncryptionModule } from 'src/common/encryption/encryption.module';
 import { MIDDLEWARE_CONFIG_PATH } from 'src/common/request/constants/middleware-config-path.constant';
 import configs from 'src/configs';
 import { AppRouterModule } from 'src/router/router.module';
@@ -37,7 +36,6 @@ import { AppRouterModule } from 'src/router/router.module';
     }),
     CommonModule,
     AppMiddlewareModule,
-    EncryptionModule,
     AppRouterModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
