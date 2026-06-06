@@ -1,6 +1,10 @@
 import { DynamicModule, Global, Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import {
+    REDIS_CONFIG_PATH,
+    REDIS_DEFAULTS,
+} from 'src/common/redis/constants/redis.constant';
 import { RedisService } from 'src/common/redis/services/redis.service';
 
 @Global()
@@ -17,11 +21,26 @@ export class RedisModule {
                     provide: Redis,
                     inject: [ConfigService],
                     useFactory: (configService: ConfigService) => {
-                        const url: string =
-                            configService.get<string>('redis.cached.url') ??
-                            'redis://127.0.0.1:6379';
+                        const url =
+                            configService.get<string>(
+                                REDIS_CONFIG_PATH.CACHED.URL,
+                            ) ?? REDIS_DEFAULTS.URL;
+                        const port =
+                            configService.get<number>(
+                                REDIS_CONFIG_PATH.CACHED.PORT,
+                            ) ?? REDIS_DEFAULTS.PORT;
+                        const password = configService.get<string>(
+                            REDIS_CONFIG_PATH.CACHED.PASSWORD,
+                        );
+                        const db =
+                            configService.get<number>(
+                                REDIS_CONFIG_PATH.CACHED.DB,
+                            ) ?? REDIS_DEFAULTS.DB;
 
                         const client = new Redis(url, {
+                            port,
+                            ...(password ? { password } : {}),
+                            db,
                             retryStrategy: (times: number) =>
                                 Math.min(times * 50, 2000),
                             maxRetriesPerRequest: 3,
