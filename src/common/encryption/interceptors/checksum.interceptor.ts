@@ -28,10 +28,16 @@ export class ChecksumInterceptor implements NestInterceptor {
             });
         }
 
-        const secret = this.configService.get<string>('app.shopAppKey');
+        const secret =
+            this.configService.get<string>('app.clientAppKey') ?? '';
 
         if (
-            !this.helperHashService.isValidDataChecksum(data, checksum, secret)
+            !secret ||
+            !this.helperHashService.isValidDataChecksum(
+                data,
+                checksum,
+                secret,
+            )
         ) {
             throw new BadRequestException({
                 statusCode: HttpStatus.BAD_REQUEST,

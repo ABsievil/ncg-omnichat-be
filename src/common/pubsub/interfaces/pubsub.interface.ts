@@ -8,3 +8,15 @@ export interface IPubSubMessage {
 export interface IPubSubPublishOptions {
     attributes?: Record<string, string>;
 }
+
+export interface IPubSubPublishRetryOptions {
+    maxRetries?: number;
+    retryDelayMs?: number;
+}
+
+export interface IPubSubSubscribeOptions {
+    flowControl?: {
+        maxMessages?: number;
+        allowExcessMessages?: boolean;
+    };
+}

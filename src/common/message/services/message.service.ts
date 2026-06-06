@@ -12,7 +12,7 @@ import {
     IMessageValidationImportErrorParam,
 } from 'src/common/message/interfaces/message.interface';
 import { IMessageService } from 'src/common/message/interfaces/message.service.interface';
-import { Column } from 'src/modules/table-response/interfaces/table-response.interface';
+import { ITableResponseColumn } from 'src/common/table-response/interfaces/table-response.interface';
 
 @Injectable()
 export class MessageService implements IMessageService {
@@ -26,11 +26,15 @@ export class MessageService implements IMessageService {
         private readonly helperArrayService: HelperArrayService
     ) {
         this.defaultLanguage =
-            this.configService.get<ENUM_MESSAGE_LANGUAGE>('message.language');
-        this.availableLanguage = this.configService.get<
-            ENUM_MESSAGE_LANGUAGE[]
-        >('message.availableLanguage');
-        this.debug = this.configService.get<boolean>('debug.enable');
+            this.configService.get<ENUM_MESSAGE_LANGUAGE>(
+                'message.defaultLanguage',
+            ) ?? ENUM_MESSAGE_LANGUAGE.EN;
+        this.availableLanguage =
+            this.configService.get<ENUM_MESSAGE_LANGUAGE[]>(
+                'message.availableLanguages',
+            ) ?? [ENUM_MESSAGE_LANGUAGE.EN];
+        this.debug =
+            this.configService.get<boolean>('debug.enable') ?? false;
     }
 
     //! Filter message base on available language
@@ -111,10 +115,10 @@ export class MessageService implements IMessageService {
     }
 
     translateTableConfig(
-        columns: Column[],
+        columns: ITableResponseColumn[],
         language?: string,
         translateProps: string[] = ['name']
-    ): Column[] {
+    ): ITableResponseColumn[] {
         return columns.map(col => {
             const newCol = { ...col };
 

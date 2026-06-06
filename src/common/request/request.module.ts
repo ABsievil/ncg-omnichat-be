@@ -7,6 +7,7 @@ import {
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ValidationError } from 'class-validator';
 import { RequestValidationException } from 'src/common/request/exceptions/request.validation.exception';
+import { RequestContextInterceptor } from 'src/common/request/interceptors/request-context.interceptor';
 import { RequestTimeoutInterceptor } from 'src/common/request/interceptors/request.timeout.interceptor';
 
 @Module({})
@@ -16,6 +17,10 @@ export class RequestModule {
       module: RequestModule,
       controllers: [],
       providers: [
+        {
+          provide: APP_INTERCEPTOR,
+          useClass: RequestContextInterceptor,
+        },
         {
           provide: APP_INTERCEPTOR,
           useClass: RequestTimeoutInterceptor,

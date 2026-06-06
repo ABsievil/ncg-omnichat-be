@@ -7,7 +7,13 @@ import {
 } from './database/database.module';
 import { DatabaseOptionService } from './database/services/database.options.service';
 import { DATABASE_CONNECTION_NAME } from './database/constants/database.constant';
+import { EncryptionModule } from './encryption/encryption.module';
+import { FileModule } from './file/file.module';
+import { HelperModule } from './helper/helper.module';
+import { MessageModule } from './message/message.module';
 import { PaginationModule } from './pagination/pagination.module';
+import { PubSubModule } from './pubsub/pubsub.module';
+import { RedisModule } from './redis/redis.module';
 import { ResponseModule } from './response/response.module';
 
 @Module({
@@ -23,6 +29,12 @@ import { ResponseModule } from './response/response.module';
     RequestModule.forRoot(),
     DatabaseModule.forRoot(),
     PaginationModule.forRoot(),
+    HelperModule.forRoot(),
+    MessageModule.forRoot(),
+    RedisModule.forRoot(),
+    EncryptionModule.forRoot(),
+    FileModule.forRoot(),
+    PubSubModule.forRoot(),
   ],
 })
 export class CommonModule {}

@@ -1,18 +1,3 @@
-import { IFile } from 'src/common/file/interfaces/file.interface';
+import type { IFileStorageService } from 'src/common/file/interfaces/file-storage.interface';
 
-export interface IR2Service {
-    uploadFile(file: IFile, path: string, pathPrefix: string): Promise<string>;
-    uploadMultipleFiles(
-        files: IFile[],
-        path: string,
-        pathPrefix: string[]
-    ): Promise<string[]>;
-    deleteFile(fileUrl: string): Promise<void>;
-    deleteMultipleFiles(fileUrls: string[]): Promise<void>;
-    fastUploadMultipleFiles(
-        files: IFile[],
-        path: string,
-        pathPrefix: string[]
-    ): Promise<string[]>;
-    deleteMultipleFilesWithBatch(fileUrls: string[]): Promise<void>;
-}
+export type IR2Service = IFileStorageService;

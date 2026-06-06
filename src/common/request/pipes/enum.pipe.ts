@@ -19,7 +19,7 @@ export function RequestEnumPipe(
     class MixinRequestEnumPipe implements PipeTransform {
         constructor(
             @Inject(REQUEST)
-            private readonly request: Request,
+            private readonly request: any,
             private readonly messageService: MessageService
         ) {}
 

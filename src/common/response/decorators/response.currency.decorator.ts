@@ -5,12 +5,13 @@ import { requestContextStorage } from 'src/common/response/contexts/request-asyn
 export function TransformCurrency() {
     return Transform(({ value }: { value: number }) => {
         const context = requestContextStorage.getStore();
-        const helperCurrencyService: HelperCurrencyService =
-            context?.helperCurrencyService;
+        const helperCurrencyService = context?.helperCurrencyService;
 
         try {
             const valueFormatted =
-                value && !isNaN(Number(value))
+                value &&
+                !isNaN(Number(value)) &&
+                helperCurrencyService
                     ? helperCurrencyService.roundPrice(value)
                     : 0;
 

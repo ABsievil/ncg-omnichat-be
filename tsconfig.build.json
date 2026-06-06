@@ -1,31 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "include": ["src/**/*"],
-  "exclude": [
-    "node_modules",
-    "test",
-    "dist",
-    "**/*spec.ts",
-    "src/common/pubsub",
-    "src/common/file",
-    "src/common/redis",
-    "src/common/fcm",
-    "src/common/message",
-    "src/common/helper",
-    "src/common/doc",
-    "src/common/encryption",
-    "src/common/request/validations",
-    "src/common/request/decorators",
-    "src/common/request/pipes",
-    "src/common/request/interceptors/request-context.interceptor.ts",
-    "src/common/request/types",
-    "src/common/pagination/pipes",
-    "src/common/pagination/dtos",
-    "src/common/pagination/decorators",
-    "src/common/response/decorators",
-    "src/common/response/interceptors",
-    "src/common/response/dtos",
-    "src/common/response/interfaces",
-    "src/common/response/contexts"
-  ]
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
 }

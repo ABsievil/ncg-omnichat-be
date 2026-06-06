@@ -27,7 +27,7 @@ export function ExistsDBPipe(
             @InjectDatabaseConnection()
             private readonly databaseConnection: Connection,
             private readonly messageService: MessageService,
-            @Inject(REQUEST) private readonly request: Request
+            @Inject(REQUEST) private readonly request: any
         ) {}
 
         async transform(value: string): Promise<string | any> {

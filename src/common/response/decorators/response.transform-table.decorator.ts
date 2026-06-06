@@ -1,7 +1,6 @@
 import { Transform } from 'class-transformer';
 import { DateTime } from 'luxon';
 import { ENUM_MESSAGE_LANGUAGE } from 'src/common/message/enums/message.enum';
-import { MessageService } from 'src/common/message/services/message.service';
 import { requestContextStorage } from 'src/common/response/contexts/request-async-local-storage.context';
 
 export function TransformTable(
@@ -13,20 +12,20 @@ export function TransformTable(
         if (value === null || value === undefined) return '-';
         const context = requestContextStorage.getStore();
         const language = context?.language || ENUM_MESSAGE_LANGUAGE.VI;
-        const messageService: MessageService = context?.messageService;
+        const messageService = context?.messageService;
 
         try {
             switch (typeof value) {
                 case 'string':
                     if (!value) return '-';
-                    if (enumMap) {
+                    if (enumMap && messageService) {
                         return (
                             messageService.setMessage(enumMap[value], {
                                 customLanguage: language,
                             }) || value
                         );
                     }
-                    if (isTranslateString) {
+                    if (isTranslateString && messageService) {
                         return messageService.setMessage(value, {
                             customLanguage: language,
                         });
@@ -34,7 +33,7 @@ export function TransformTable(
 
                     return value;
                 case 'number':
-                    if (enumMap) {
+                    if (enumMap && messageService) {
                         return (
                             messageService.setMessage(enumMap[value], {
                                 customLanguage: language,

@@ -23,6 +23,7 @@ import {
 import {
     ResponsePagingDto,
     ResponsePagingMetadataDto,
+    ResponsePagingMetadataPaginationRequestDto,
 } from 'src/common/response/dtos/response.paging.dto';
 import { IResponsePaging } from 'src/common/response/interfaces/response.interface';
 
@@ -69,18 +70,18 @@ export class ResponseLookupPagingInterceptor
                     const xLanguage: string =
                         request.__language ??
                         this.configService.get<ENUM_MESSAGE_LANGUAGE>(
-                            'message.language'
-                        );
+                            'message.defaultLanguage',
+                        ) ??
+                        ENUM_MESSAGE_LANGUAGE.EN;
                     const xTimestamp =
                         this.helperDateService.getTimestamp(today);
                     const xTimezone = this.helperDateService.getZone(today);
                     const xVersion =
                         request.__version ??
-                        this.configService.get<string>(
-                            'app.urlVersion.version'
-                        );
+                        this.configService.get<string>('app.apiVersion') ??
+                        '';
                     const xRepoVersion =
-                        this.configService.get<string>('app.version');
+                        this.configService.get<string>('app.release') ?? '';
                     let metadata: ResponsePagingMetadataDto = {
                         language: xLanguage,
                         timestamp: xTimestamp,
@@ -124,7 +125,7 @@ export class ResponseLookupPagingInterceptor
                         pagination: {
                             ...xPagination,
                             ...responseData._pagination,
-                        },
+                        } as ResponsePagingMetadataPaginationRequestDto,
                     };
 
                     const message: string = this.messageService.setMessage(

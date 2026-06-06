@@ -1,3 +1,4 @@
+import { DocumentData } from 'firebase-admin/firestore';
 import { DateObjectUnits, DateTime, Duration } from 'luxon';
 import { IHelperDateCreateOptions } from 'src/common/helper/interfaces/helper.interface';
 
@@ -20,7 +21,7 @@ export interface IHelperDateService {
     validateDate(date: string): boolean;
     getDatesInRange(fromDate: string | Date, toDate: string | Date): Date[];
     convertToUTC(date: Date, utcOffset: number): string;
-    getLocaleAndUtc(branch: FirebaseFirestore.DocumentData): {
+    getLocaleAndUtc(branch: DocumentData): {
         locale: string;
         utc: number;
     };

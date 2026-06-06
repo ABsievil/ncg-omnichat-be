@@ -21,6 +21,7 @@ import { IResponsePaging } from 'src/common/response/interfaces/response.interfa
 import {
     ResponsePagingDto,
     ResponsePagingMetadataDto,
+    ResponsePagingMetadataPaginationRequestDto,
 } from 'src/common/response/dtos/response.paging.dto';
 import { ConfigService } from '@nestjs/config';
 import { HelperDateService } from 'src/common/helper/services/helper.date.service';
@@ -69,18 +70,18 @@ export class ResponsePagingInterceptor
                     const xLanguage: string =
                         request.__language ??
                         this.configService.get<ENUM_MESSAGE_LANGUAGE>(
-                            'message.language'
-                        );
+                            'message.defaultLanguage',
+                        ) ??
+                        ENUM_MESSAGE_LANGUAGE.EN;
                     const xTimestamp =
                         this.helperDateService.getTimestamp(today);
                     const xTimezone = this.helperDateService.getZone(today);
                     const xVersion =
                         request.__version ??
-                        this.configService.get<string>(
-                            'app.urlVersion.version'
-                        );
+                        this.configService.get<string>('app.apiVersion') ??
+                        '';
                     const xRepoVersion =
-                        this.configService.get<string>('app.version');
+                        this.configService.get<string>('app.release') ?? '';
                     let metadata: ResponsePagingMetadataDto = {
                         language: xLanguage,
                         timestamp: xTimestamp,
@@ -127,7 +128,7 @@ export class ResponsePagingInterceptor
                         pagination: {
                             ...xPagination,
                             ...responseData._pagination,
-                        },
+                        } as ResponsePagingMetadataPaginationRequestDto,
                     };
 
                     const message: string = this.messageService.setMessage(

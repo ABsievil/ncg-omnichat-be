@@ -5,7 +5,6 @@ import { HelperArrayService } from 'src/common/helper/services/helper.array.serv
 import { HelperConvertFirebaseService } from 'src/common/helper/services/helper.convert.firebase.service';
 import { HelperCurrencyService } from 'src/common/helper/services/helper.currency.service';
 import { HelperDateService } from 'src/common/helper/services/helper.date.service';
-import { HelperDiscountService } from 'src/common/helper/services/helper.discount.service';
 import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
 import { HelperEqualObjectService } from 'src/common/helper/services/helper.equal.object.service';
 import { HelperHashService } from 'src/common/helper/services/helper.hash.service';
@@ -23,7 +22,6 @@ export class HelperModule {
             providers: [
                 HelperArrayService,
                 HelperDateService,
-                HelperDiscountService,
                 HelperEncryptionService,
                 HelperHashService,
                 HelperStringService,
@@ -37,7 +35,6 @@ export class HelperModule {
             exports: [
                 HelperArrayService,
                 HelperDateService,
-                HelperDiscountService,
                 HelperEncryptionService,
                 HelperHashService,
                 HelperStringService,
@@ -54,13 +51,15 @@ export class HelperModule {
                     inject: [ConfigService],
                     imports: [ConfigModule],
                     useFactory: (configService: ConfigService) => ({
-                        secret: configService.get<string>(
-                            'helper.jwt.defaultSecretKey'
-                        ),
+                        secret:
+                            configService.get<string>(
+                                'helper.jwt.defaultSecretKey',
+                            ) ?? 'omnichat-default-secret',
                         signOptions: {
-                            expiresIn: configService.get<string>(
-                                'helper.jwt.defaultExpirationTime'
-                            ),
+                            expiresIn:
+                                (configService.get<string>(
+                                    'helper.jwt.defaultExpirationTime',
+                                ) ?? '1h') as never,
                         },
                     }),
                 }),

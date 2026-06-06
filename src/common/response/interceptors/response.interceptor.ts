@@ -61,7 +61,7 @@ export class ResponseInterceptor
                     // set default response
                     let httpStatus: HttpStatus = response.statusCode;
                     let statusCode: number = response.statusCode;
-                    let data: Record<string, any> = undefined;
+                    let data: Record<string, any> | undefined;
 
                     // metadata
                     const today = this.helperDateService.create();
@@ -69,18 +69,18 @@ export class ResponseInterceptor
                     const xLanguage: string =
                         request.__language ??
                         this.configService.get<ENUM_MESSAGE_LANGUAGE>(
-                            'message.language'
-                        );
+                            'message.defaultLanguage',
+                        ) ??
+                        ENUM_MESSAGE_LANGUAGE.EN;
                     const xTimestamp =
                         this.helperDateService.getTimestamp(today);
                     const xTimezone = this.helperDateService.getZone(today);
                     const xVersion =
                         request.__version ??
-                        this.configService.get<string>(
-                            'app.urlVersion.version'
-                        );
+                        this.configService.get<string>('app.apiVersion') ??
+                        '';
                     const xRepoVersion =
-                        this.configService.get<string>('app.version');
+                        this.configService.get<string>('app.release') ?? '';
                     let metadata: ResponseMetadataDto = {
                         language: xLanguage,
                         timestamp: xTimestamp,

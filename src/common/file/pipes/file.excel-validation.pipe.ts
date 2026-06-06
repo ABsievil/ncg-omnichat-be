@@ -16,7 +16,7 @@ export class FileExcelValidationPipe<T, N = Record<string, any>>
 
     async transform(value: IFileRows<N>[]): Promise<IFileRows<T>[]> {
         if (!value) {
-            return;
+            return [];
         }
 
         await this.validate(value);

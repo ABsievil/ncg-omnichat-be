@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DocumentData, DocumentSnapshot } from 'firebase-admin/firestore';
 import { IHelperConvertFirebaseService } from 'src/common/helper/interfaces/helper.convert.firebase-service.interface';
 
 @Injectable()
@@ -11,12 +12,12 @@ export class HelperConvertFirebaseService
      *@description Normalize Firestore document snapshot
      */
     normalizeFirestoreDoc(
-        doc: FirebaseFirestore.DocumentSnapshot,
+        doc: DocumentSnapshot,
         initialFields?: Record<string, any>
     ): Record<string, any> {
-        const data = doc.data() as FirebaseFirestore.DocumentData;
+        const data = doc.data() as DocumentData;
         if (!data) {
-            return;
+            return initialFields ?? {};
         }
 
         const normalized: Record<string, any> = { ...initialFields };
@@ -31,11 +32,11 @@ export class HelperConvertFirebaseService
      * @description Normalize Firestore data object
      */
     normalizeFirestoreData(
-        data: FirebaseFirestore.DocumentData | Record<string, any>,
+        data: DocumentData | Record<string, any>,
         initialFields?: Record<string, any>
     ): Record<string, any> {
         if (!data) {
-            return;
+            return initialFields ?? {};
         }
 
         const normalized: Record<string, any> = { ...initialFields };

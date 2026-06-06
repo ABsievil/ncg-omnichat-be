@@ -15,7 +15,7 @@ export class FileExcelParsePipe<T> implements PipeTransform {
 
     async transform(value: IFile): Promise<IFileRows<T>[]> {
         if (!value) {
-            return;
+            return [];
         }
 
         await this.validate(value);
@@ -33,6 +33,8 @@ export class FileExcelParsePipe<T> implements PipeTransform {
                 message: 'file.error.mimeInvalid',
             });
         }
+
+        return;
     }
 
     parse(value: IFile): IFileRows<T>[] {

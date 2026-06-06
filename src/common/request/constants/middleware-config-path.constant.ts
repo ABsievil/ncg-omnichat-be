@@ -11,9 +11,5 @@ export const MIDDLEWARE_CONFIG_PATH = {
   RESPONSE_TIME_HEADER: 'middleware.responseTime.headerName',
   THROTTLE_TTL: 'middleware.throttle.ttl',
   THROTTLE_LIMIT: 'middleware.throttle.limit',
-} as const;
-
-export const MESSAGE_CONFIG_PATH = {
-  DEFAULT_LANGUAGE: 'message.defaultLanguage',
-  AVAILABLE_LANGUAGES: 'message.availableLanguages',
+  REQUEST_TIMEOUT_SEC: 'middleware.timeout',
 } as const;

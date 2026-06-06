@@ -1,4 +1,3 @@
-import { faker } from '@faker-js/faker';
 import { ApiProperty, PickType } from '@nestjs/swagger';
 import { PAGINATION_DEFAULT_AVAILABLE_ORDER_DIRECTION } from 'src/common/pagination/constants/pagination.constant';
 import { ENUM_PAGINATION_ORDER_DIRECTION_TYPE } from 'src/common/pagination/enums/pagination.enum';
@@ -9,15 +8,15 @@ import {
 
 export class ResponsePagingMetadataPaginationRequestDto {
     @ApiProperty({
-        required: true,
-        example: faker.person.fullName(),
+        required: false,
+        example: 'keyword',
     })
-    search: string;
+    search?: string;
 
     @ApiProperty({
         required: true,
     })
-    filters: Record<
+    filters?: Record<
         string,
         string | number | boolean | Array<string | number | boolean> | Date
     >;
@@ -104,7 +103,7 @@ export class ResponsePagingDto extends PickType(ResponseDto, [
             version: '1',
             repoVersion: '1.0.0',
             pagination: {
-                search: faker.person.fullName(),
+                search: 'keyword',
                 filters: {},
                 page: 1,
                 perPage: 20,

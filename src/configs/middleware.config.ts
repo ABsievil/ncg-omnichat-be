@@ -64,4 +64,5 @@ export default registerAs('middleware', () => ({
     ),
     limit: Number.parseInt(process.env.MIDDLEWARE_THROTTLE_LIMIT ?? '100', 10),
   },
+  timeout: Number.parseInt(process.env.MIDDLEWARE_REQUEST_TIMEOUT_SEC ?? '30', 10),
 }));

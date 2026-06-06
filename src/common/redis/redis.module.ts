@@ -1,10 +1,13 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { DynamicModule, Global, Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { RedisService } from 'src/common/redis/services/redis.service';
 
+@Global()
 @Module({})
 export class RedisModule {
+    private static readonly logger = new Logger(RedisModule.name);
+
     static forRoot(): DynamicModule {
         return {
             module: RedisModule,
@@ -14,32 +17,31 @@ export class RedisModule {
                     provide: Redis,
                     inject: [ConfigService],
                     useFactory: (configService: ConfigService) => {
-                        const host =
-                            configService.get<string>('redis.cached.host');
-                        const port =
-                            configService.get<number>('redis.cached.port');
-                        const password = configService.get<string>(
-                            'redis.cached.password'
-                        );
-                        const username = configService.get<string>(
-                            'redis.cached.username'
-                        );
-                        const tls =
-                            configService.get<boolean>('redis.cached.tls');
+                        const url: string =
+                            configService.get<string>('redis.cached.url') ??
+                            'redis://127.0.0.1:6379';
 
-                        const client = new Redis({
-                            host,
-                            port,
-                            password,
-                            username,
-                            tls: tls
-                                ? { rejectUnauthorized: false }
-                                : undefined,
-                            retryStrategy: times => {
-                                const delay = Math.min(times * 50, 2000);
-                                return delay;
-                            },
+                        const client = new Redis(url, {
+                            retryStrategy: (times: number) =>
+                                Math.min(times * 50, 2000),
                             maxRetriesPerRequest: 3,
+                            ...(url.startsWith('rediss://')
+                                ? {
+                                      tls: {
+                                          rejectUnauthorized: false,
+                                      },
+                                  }
+                                : {}),
+                        });
+
+                        client.on('error', (error: Error) => {
+                            RedisModule.logger.warn(
+                                `Redis connection error: ${error.message}`,
+                            );
+                        });
+
+                        client.on('connect', () => {
+                            RedisModule.logger.log('Redis connected');
                         });
 
                         return client;
@@ -48,7 +50,6 @@ export class RedisModule {
                 RedisService,
             ],
             exports: [Redis, RedisService],
-            global: true,
         };
     }
 }

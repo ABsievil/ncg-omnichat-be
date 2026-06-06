@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DocumentData } from 'firebase-admin/firestore';
 import { DateObjectUnits, DateTime, Duration } from 'luxon';
 import { DEFAULT_LOCALE, DEFAULT_UTC } from 'src/app/constants/app.constant';
 import { ENUM_HELPER_DATE_DAY_OF } from 'src/common/helper/enums/helper.enum';
@@ -11,7 +12,9 @@ export class HelperDateService implements IHelperDateService {
     private readonly defTz: string;
 
     constructor(private readonly configService: ConfigService) {
-        this.defTz = this.configService.get<string>('app.timezone');
+        this.defTz =
+            this.configService.get<string>('app.timezone') ??
+            `UTC+${DEFAULT_UTC}`;
     }
 
     calculateAge(dateOfBirth: Date, fromYear?: number): Duration {
@@ -280,7 +283,7 @@ export class HelperDateService implements IHelperDateService {
     /**
      * @description Lấy locale và utc của branch
      */
-    getLocaleAndUtc(branch: FirebaseFirestore.DocumentData): {
+    getLocaleAndUtc(branch: DocumentData): {
         locale: string;
         utc: number;
     } {

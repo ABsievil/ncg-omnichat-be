@@ -6,166 +6,200 @@ import {
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { extname } from 'path';
-import { PARALLEL_PROCESSES_LIMIT } from 'src/common/file/constants/r2.constant';
-import { IFile } from 'src/common/file/interfaces/file.interface';
-import { IR2Service } from 'src/common/file/interfaces/r2.interface';
 import { v4 as uuidv4 } from 'uuid';
+import {
+    FILE_STORAGE_CONFIG_PATH,
+    FILE_STORAGE_DEFAULTS,
+} from 'src/common/file/constants/file-storage.constant';
+import type { IFile } from 'src/common/file/interfaces/file.interface';
+import type { IR2Service } from 'src/common/file/interfaces/r2.interface';
 
 @Injectable()
 export class R2Service implements IR2Service {
-    private readonly s3: S3Client;
-    private readonly bucket: string;
     private readonly logger = new Logger(R2Service.name);
+    private readonly s3?: S3Client;
+    private readonly bucket: string;
+    private readonly publicEndpoint: string;
+    private readonly configured: boolean;
+
     constructor(private readonly configService: ConfigService) {
-        const accessKeyId = this.configService.get('r2.accessKeyId');
-        const secretAccessKey = this.configService.get('r2.secretAccessKey');
-        const endpoint = this.configService.get('r2.endpoint');
-        const bucket = this.configService.get('r2.bucket');
+        const accessKeyId = this.configService.get<string>(
+            FILE_STORAGE_CONFIG_PATH.R2.ACCESS_KEY_ID,
+        );
+        const secretAccessKey = this.configService.get<string>(
+            FILE_STORAGE_CONFIG_PATH.R2.SECRET_ACCESS_KEY,
+        );
+        const endpoint = this.configService.get<string>(
+            FILE_STORAGE_CONFIG_PATH.R2.ENDPOINT,
+        );
+        const bucket =
+            this.configService.get<string>(
+                FILE_STORAGE_CONFIG_PATH.R2.BUCKET,
+            ) ?? '';
+        const publicEndpoint =
+            this.configService.get<string>(
+                FILE_STORAGE_CONFIG_PATH.R2.PUBLIC_ENDPOINT,
+            ) ?? '';
+
+        this.bucket = bucket;
+        this.publicEndpoint = publicEndpoint.replace(/\/$/, '');
+        this.configured = Boolean(
+            accessKeyId &&
+                secretAccessKey &&
+                endpoint &&
+                bucket &&
+                publicEndpoint,
+        );
+
+        if (!this.configured) {
+            this.logger.warn('R2 storage is not fully configured');
+            return;
+        }
+
         this.s3 = new S3Client({
             region: 'auto',
-            endpoint: endpoint,
+            endpoint,
             credentials: {
-                accessKeyId: accessKeyId,
-                secretAccessKey: secretAccessKey,
+                accessKeyId: accessKeyId!,
+                secretAccessKey: secretAccessKey!,
             },
         });
-        this.bucket = bucket;
+    }
+
+    private assertReady(): void {
+        if (!this.configured || !this.s3) {
+            throw new Error('R2 storage is not configured');
+        }
+    }
+
+    private generateObjectKey(
+        originalName: string,
+        path: string,
+        pathPrefix: string,
+    ): string {
+        return `${path}/${pathPrefix}/${uuidv4()}${extname(originalName)}`;
+    }
+
+    private buildPublicUrl(objectKey: string): string {
+        return `${this.publicEndpoint}/${objectKey}`;
     }
 
     async uploadFile(
         file: IFile,
-        path: string = 'uploads',
-        pathPrefix: string = 'uploads'
-    ): Promise<string> {
-        if (!file || !file.buffer) {
-            return;
-        }
-        try {
-            const key = this.generateFileName(
-                file.originalname,
-                path,
-                pathPrefix
-            );
+        path: string = FILE_STORAGE_DEFAULTS.UPLOAD_PATH,
+        pathPrefix: string = FILE_STORAGE_DEFAULTS.PATH_PREFIX,
+    ): Promise<string | undefined> {
+        this.assertReady();
 
-            await this.s3.send(
-                new PutObjectCommand({
-                    Bucket: this.bucket,
-                    Key: key,
-                    Body: file.buffer,
-                    ContentType: file.mimetype,
-                })
-            );
-            const publicEndpoint = this.configService.get('r2.publicEndpoint');
-            const fileUrl = `${publicEndpoint.replace(/\/$/, '')}/${key}`;
-            return fileUrl;
-        } catch (error) {
-            this.logger.error(`Error uploading file: ${error.message}`);
-            throw new Error(`File upload failed: ${error.message}`);
+        if (!file?.buffer) {
+            return undefined;
         }
+
+        const objectKey = this.generateObjectKey(
+            file.originalname,
+            path,
+            pathPrefix,
+        );
+
+        await this.s3!.send(
+            new PutObjectCommand({
+                Bucket: this.bucket,
+                Key: objectKey,
+                Body: file.buffer,
+                ContentType: file.mimetype,
+            }),
+        );
+
+        return this.buildPublicUrl(objectKey);
     }
 
     async uploadMultipleFiles(
         files: IFile[],
         path: string,
-        pathPrefix: string[] = []
+        pathPrefix: string[] = [],
     ): Promise<string[]> {
-        if (!files || files.length === 0) {
+        if (!files.length) {
             return [];
         }
+
         const results: string[] = [];
-        const errors: Error[] = [];
-        for (let i = 0; i < files.length; i += PARALLEL_PROCESSES_LIMIT) {
-            const batch = files.slice(i, i + PARALLEL_PROCESSES_LIMIT);
-            const batchPromises = batch.map((file, index) => {
-                const actualIndex = i + index;
-                const prefix =
-                    pathPrefix.length > 1
-                        ? pathPrefix[i + index]
-                        : pathPrefix[0];
-                return this.uploadFile(file, path, prefix)
-                    .then(url => (results[actualIndex] = url))
-                    .catch(error => {
-                        errors.push(error);
-                        return null;
-                    });
+        const batchSize = FILE_STORAGE_DEFAULTS.PARALLEL_BATCH_SIZE;
+
+        for (let offset = 0; offset < files.length; offset += batchSize) {
+            const batch = files.slice(offset, offset + batchSize);
+            const batchResults = await Promise.all(
+                batch.map((file, batchIndex) => {
+                    const index = offset + batchIndex;
+                    const prefix =
+                        pathPrefix.length > 1
+                            ? (pathPrefix[index] ??
+                              FILE_STORAGE_DEFAULTS.PATH_PREFIX)
+                            : (pathPrefix[0] ??
+                              FILE_STORAGE_DEFAULTS.PATH_PREFIX);
+
+                    return this.uploadFile(file, path, prefix);
+                }),
+            );
+
+            batchResults.forEach((url, batchIndex) => {
+                if (url) {
+                    results[offset + batchIndex] = url;
+                }
             });
-
-            await Promise.all(batchPromises);
         }
-        if (errors.length > 0) {
-            this.logger.warn(
-                `${errors.length} files failed to upload out of ${files.length}`
-            );
-        }
-        return results;
-    }
 
-    async deleteFile(fileUrl: string): Promise<void> {
-        try {
-            if (!fileUrl) {
-                return;
-            }
-
-            const url = new URL(fileUrl);
-            const key = url.pathname.substring(1);
-
-            await this.s3.send(
-                new DeleteObjectCommand({
-                    Bucket: this.bucket,
-                    Key: key,
-                })
-            );
-        } catch (error) {
-            this.logger.error('Delete failed:', error);
-            throw new Error(`Delete failed: ${error.message}`);
-        }
-    }
-
-    async deleteMultipleFiles(fileUrls: string[]): Promise<void> {
-        await Promise.all(fileUrls.map(url => this.deleteFile(url)));
-    }
-
-    async deleteMultipleFilesWithBatch(fileUrls: string[]): Promise<void> {
-        if (!fileUrls || fileUrls.length === 0) {
-            return;
-        }
-        const errors: Error[] = [];
-        for (let i = 0; i < fileUrls.length; i += PARALLEL_PROCESSES_LIMIT) {
-            const batch = fileUrls.slice(i, i + PARALLEL_PROCESSES_LIMIT);
-            await Promise.all(
-                batch.map(url =>
-                    this.deleteFile(url).catch(error => {
-                        errors.push(error);
-                        return null;
-                    })
-                )
-            );
-        }
-        if (errors.length > 0) {
-            this.logger.warn(
-                `${errors.length} files failed to delete out of ${fileUrls.length}`
-            );
-        }
+        return results.filter(Boolean);
     }
 
     async fastUploadMultipleFiles(
         files: IFile[],
         path: string,
-        pathPrefix: string[]
+        pathPrefix: string[] = [],
     ): Promise<string[]> {
-        return Promise.all(
-            files.map((file, idx) =>
-                this.uploadFile(file, path, pathPrefix[idx] || '')
-            )
+        if (!files.length) {
+            return [];
+        }
+
+        const uploads = await Promise.all(
+            files.map((file, index) =>
+                this.uploadFile(
+                    file,
+                    path,
+                    pathPrefix[index] ?? FILE_STORAGE_DEFAULTS.PATH_PREFIX,
+                ),
+            ),
+        );
+
+        return uploads.filter((url): url is string => Boolean(url));
+    }
+
+    async deleteFile(fileUrl: string): Promise<void> {
+        this.assertReady();
+
+        if (!fileUrl) {
+            return;
+        }
+
+        const objectKey = new URL(fileUrl).pathname.replace(/^\//, '');
+
+        await this.s3!.send(
+            new DeleteObjectCommand({
+                Bucket: this.bucket,
+                Key: objectKey,
+            }),
         );
     }
 
-    private generateFileName(
-        originalName: string,
-        path: string,
-        pathPrefix: string
-    ): string {
-        const fileExtension = extname(originalName);
-        return `${path}/${pathPrefix}/${uuidv4()}${fileExtension}`;
+    async deleteMultipleFiles(fileUrls: string[]): Promise<void> {
+        if (!fileUrls.length) {
+            return;
+        }
+
+        const batchSize = FILE_STORAGE_DEFAULTS.PARALLEL_BATCH_SIZE;
+
+        for (let offset = 0; offset < fileUrls.length; offset += batchSize) {
+            const batch = fileUrls.slice(offset, offset + batchSize);
+            await Promise.all(batch.map(url => this.deleteFile(url)));
+        }
     }
 }

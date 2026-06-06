@@ -71,7 +71,7 @@ export function FileUploadMultipleFields(
 }
 
 export const FilePartNumber: () => ParameterDecorator = createParamDecorator(
-    (_: unknown, ctx: ExecutionContext): number => {
+    (_: unknown, ctx: ExecutionContext): number | undefined => {
         const request = ctx.switchToHttp().getRequest<IRequestApp>();
         const { headers } = request;
         return headers['x-part-number']

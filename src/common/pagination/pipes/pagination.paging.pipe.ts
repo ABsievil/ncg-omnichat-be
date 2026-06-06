@@ -11,7 +11,7 @@ export function PaginationPagingPipe(
     @Injectable({ scope: Scope.REQUEST })
     class MixinPaginationPagingPipe implements PipeTransform {
         constructor(
-            @Inject(REQUEST) protected readonly request: IRequestApp,
+            @Inject(REQUEST) protected readonly request: any,
             private readonly paginationService: PaginationService
         ) {}
 

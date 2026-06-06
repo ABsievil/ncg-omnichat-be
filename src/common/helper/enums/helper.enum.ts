@@ -14,8 +14,3 @@ export enum ENUM_HELPER_CURRENCY_TYPE {
     VND = 'VND',
     AUD = 'AUD',
 }
-
-export enum ENUM_HELPER_LINE_DISCOUNT_TYPE {
-    PERCENTAGE = 'percentage',
-    AMOUNT = 'amount',
-}

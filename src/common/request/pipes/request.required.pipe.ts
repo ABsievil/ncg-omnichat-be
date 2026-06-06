@@ -16,7 +16,7 @@ export function RequestRequiredPipe(field: string): Type<PipeTransform> {
     class MixinRequestRequiredPipe implements PipeTransform {
         constructor(
             @Inject(REQUEST)
-            private readonly request: Request,
+            private readonly request: any,
             private readonly messageService: MessageService
         ) {}
 

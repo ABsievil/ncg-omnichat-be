@@ -1,11 +1,12 @@
+import { DocumentData, DocumentSnapshot } from 'firebase-admin/firestore';
+
 export interface IHelperConvertFirebaseService {
     normalizeFirestoreDoc(
-        doc: FirebaseFirestore.DocumentSnapshot,
+        doc: DocumentSnapshot,
         initialFields?: Record<string, any>
     ): Record<string, any>;
 
     normalizeFirestoreData(
-        data: FirebaseFirestore.DocumentData | Record<string, any>,
-        initialFields?: Record<string, any>
+        data: DocumentData | Record<string, any>,        initialFields?: Record<string, any>
     ): Record<string, any>;
 }

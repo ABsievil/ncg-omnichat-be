@@ -15,7 +15,7 @@ export function PaginationFilterDateBetweenPipe(
     @Injectable({ scope: Scope.REQUEST })
     class MixinPaginationFilterDatePipe implements PipeTransform {
         constructor(
-            @Inject(REQUEST) protected readonly request: IRequestApp,
+            @Inject(REQUEST) protected readonly request: any,
             private readonly databaseService: DatabaseService,
             private readonly helperDateService: HelperDateService
         ) {}

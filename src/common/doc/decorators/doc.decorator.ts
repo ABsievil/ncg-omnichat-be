@@ -34,7 +34,7 @@ import { ResponseDto } from 'src/common/response/dtos/response.dto';
 import { ResponsePagingDto } from 'src/common/response/dtos/response.paging.dto';
 
 export function DocDefault<T>(options: IDocDefaultOptions<T>): MethodDecorator {
-    const docs = [];
+    const docs: MethodDecorator[] = [];
     const schema: Record<string, any> = {
         allOf: [{ $ref: getSchemaPath(ResponseDto) }],
         properties: {
@@ -73,8 +73,8 @@ export function DocOneOf(
     httpStatus: HttpStatus,
     ...documents: IDocOfOptions[]
 ): MethodDecorator {
-    const docs = [];
-    const oneOf = [];
+    const docs: MethodDecorator[] = [];
+    const oneOf: Record<string, any>[] = [];
 
     for (const doc of documents) {
         const oneOfSchema: Record<string, any> = {
@@ -120,8 +120,8 @@ export function DocAnyOf(
     httpStatus: HttpStatus,
     ...documents: IDocOfOptions[]
 ): MethodDecorator {
-    const docs = [];
-    const anyOf = [];
+    const docs: MethodDecorator[] = [];
+    const anyOf: Record<string, any>[] = [];
 
     for (const doc of documents) {
         const anyOfSchema: Record<string, any> = {
@@ -167,8 +167,8 @@ export function DocAllOf(
     httpStatus: HttpStatus,
     ...documents: IDocOfOptions[]
 ): MethodDecorator {
-    const docs = [];
-    const allOf = [];
+    const docs: MethodDecorator[] = [];
+    const allOf: Record<string, any>[] = [];
 
     for (const doc of documents) {
         const allOfSchema: Record<string, any> = {
@@ -438,17 +438,14 @@ export function DocResponsePaging<T>(
     messagePath: string,
     options: IDocResponseOptions<T>
 ): MethodDecorator {
-    const docs: IDocDefaultOptions = {
+    const docs: IDocDefaultOptions<T> = {
         httpStatus: options?.httpStatus ?? HttpStatus.OK,
         messagePath,
         statusCode: options?.statusCode ?? options?.httpStatus ?? HttpStatus.OK,
+        dto: options?.dto,
     };
 
-    if (options?.dto) {
-        docs.dto = options?.dto;
-    }
-
-    return applyDecorators(
+    const decorators: MethodDecorator[] = [
         ApiProduces('application/json'),
         ApiQuery({
             name: 'search',
@@ -494,7 +491,13 @@ export function DocResponsePaging<T>(
                 'Order direction base on _metadata.pagination.availableOrderDirection',
         }),
         ApiExtraModels(ResponsePagingDto),
-        ApiExtraModels(docs.dto as any),
+    ];
+
+    if (docs.dto) {
+        decorators.push(ApiExtraModels(docs.dto));
+    }
+
+    decorators.push(
         ApiResponse({
             description: docs.httpStatus.toString(),
             status: docs.httpStatus,
@@ -508,16 +511,23 @@ export function DocResponsePaging<T>(
                         type: 'number',
                         example: docs.statusCode,
                     },
-                    data: {
-                        type: 'array',
-                        items: {
-                            $ref: getSchemaPath(docs.dto),
-                        },
-                    },
+                    data: docs.dto
+                        ? {
+                              type: 'array',
+                              items: {
+                                  $ref: getSchemaPath(docs.dto),
+                              },
+                          }
+                        : {
+                              type: 'array',
+                              items: {},
+                          },
                 },
             },
-        })
+        }),
     );
+
+    return applyDecorators(...decorators);
 }
 
 export function DocResponseFile(

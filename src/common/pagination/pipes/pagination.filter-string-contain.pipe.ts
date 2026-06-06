@@ -12,7 +12,7 @@ export function PaginationFilterStringContainPipe(
     @Injectable({ scope: Scope.REQUEST })
     class MixinPaginationFilterContainPipe implements PipeTransform {
         constructor(
-            @Inject(REQUEST) protected readonly request: IRequestApp,
+            @Inject(REQUEST) protected readonly request: any,
             private readonly databaseService: DatabaseService
         ) {}
 

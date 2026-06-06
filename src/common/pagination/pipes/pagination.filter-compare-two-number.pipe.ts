@@ -15,7 +15,7 @@ export function PaginationFilterCompareTwoNumberPipe(
     @Injectable({ scope: Scope.REQUEST })
     class MixinPaginationFilterCompareTwoNumberPipe implements PipeTransform {
         constructor(
-            @Inject(REQUEST) protected readonly request: IRequestApp,
+            @Inject(REQUEST) protected readonly request: any,
             private readonly databaseService: DatabaseService,
             private readonly helperArrayService: HelperArrayService
         ) {}

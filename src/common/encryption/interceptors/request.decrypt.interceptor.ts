@@ -27,14 +27,13 @@ export class RequestDecryptInterceptor implements NestInterceptor {
         private readonly helperEncryptionService: HelperEncryptionService,
         private readonly reflector: Reflector
     ) {
-        this.encryptionKeyClient = this.configService.get<string>(
-            'encryption.aes.keyClient'
-        );
-        this.fallbackIv = this.configService.get<string>('encryption.aes.iv');
-        this.encryptionEnabled = this.configService.get<boolean>(
-            'encryption.aes.enable'
-        );
-        this.appEnv = this.configService.get<string>('app.env');
+        this.encryptionKeyClient =
+            this.configService.get<string>('encryption.aes.keyClient') ?? '';
+        this.fallbackIv =
+            this.configService.get<string>('encryption.aes.iv') ?? '';
+        this.encryptionEnabled =
+            this.configService.get<boolean>('encryption.aes.enable') ?? false;
+        this.appEnv = this.configService.get<string>('app.env') ?? '';
 
         // this.logger.log(`Encryption enabled: ${this.encryptionEnabled}`);
         if (this.encryptionEnabled) {

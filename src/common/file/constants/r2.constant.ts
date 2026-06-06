@@ -1,1 +1,0 @@
-export const PARALLEL_PROCESSES_LIMIT = 5;

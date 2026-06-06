@@ -7,7 +7,7 @@ export function RequestArrayPipe(separator: string): Type<PipeTransform> {
     class MixinRequestArrayPipe implements PipeTransform {
         constructor(
             @Inject(REQUEST)
-            private readonly request: Request
+            private readonly request: any
         ) {}
 
         async transform(value: string): Promise<string[] | any> {

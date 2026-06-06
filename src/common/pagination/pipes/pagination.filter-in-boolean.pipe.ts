@@ -14,7 +14,7 @@ export function PaginationFilterInBooleanPipe(
     @Injectable({ scope: Scope.REQUEST })
     class MixinPaginationFilterInBooleanPipe implements PipeTransform {
         constructor(
-            @Inject(REQUEST) protected readonly request: IRequestApp,
+            @Inject(REQUEST) protected readonly request: any,
             private readonly databaseService: DatabaseService,
             private readonly helperArrayService: HelperArrayService
         ) {}

@@ -18,19 +18,32 @@ export class MessageModule {
                     loader: I18nJsonLoader,
                     inject: [ConfigService],
                     resolvers: [new HeaderResolver(['x-custom-lang'])],
-                    useFactory: (configService: ConfigService) => ({
-                        fallbackLanguage: configService
-                            .get<string[]>('message.availableLanguage')
-                            .join(','),
-                        fallbacks: Object.values(ENUM_MESSAGE_LANGUAGE).reduce(
-                            (a, v) => ({ ...a, [`${v}-*`]: v }),
-                            {}
-                        ),
-                        loaderOptions: {
-                            path: path.join(process.cwd(), 'src/languages'),
-                            watch: true,
-                        },
-                    }),
+                    useFactory: (configService: ConfigService) => {
+                        const availableLanguages =
+                            configService.get<string[]>(
+                                'message.availableLanguages',
+                            ) ?? [ENUM_MESSAGE_LANGUAGE.EN];
+
+                        return {
+                            fallbackLanguage:
+                                configService.get<string>(
+                                    'message.defaultLanguage',
+                                ) ?? ENUM_MESSAGE_LANGUAGE.EN,
+                            fallbacks: Object.values(
+                                ENUM_MESSAGE_LANGUAGE,
+                            ).reduce(
+                                (acc, lang) => ({
+                                    ...acc,
+                                    [`${lang}-*`]: lang,
+                                }),
+                                {} as Record<string, string>,
+                            ),
+                            loaderOptions: {
+                                path: path.join(process.cwd(), 'src/languages'),
+                                watch: true,
+                            },
+                        };
+                    },
                 }),
             ],
             controllers: [],

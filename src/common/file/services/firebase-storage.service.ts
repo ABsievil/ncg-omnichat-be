@@ -1,53 +1,60 @@
-import { Bucket } from '@google-cloud/storage';
+import type { Bucket } from '@google-cloud/storage';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { extname } from 'path';
-import { IFile } from 'src/common/file/interfaces/file.interface';
 import { Readable } from 'stream';
 import { v4 as uuidv4 } from 'uuid';
-
-const CHUNK_SIZE = 5 * 1024 * 1024;
-const PARALLEL_UPLOAD_LIMIT = 5;
+import {
+    FILE_STORAGE_CONFIG_PATH,
+    FILE_STORAGE_DEFAULTS,
+} from 'src/common/file/constants/file-storage.constant';
+import type { IFile } from 'src/common/file/interfaces/file.interface';
+import type { IFileStorageService } from 'src/common/file/interfaces/file-storage.interface';
 
 @Injectable()
-export class FirebaseStorageService {
+export class FirebaseStorageService implements IFileStorageService {
     private readonly logger = new Logger(FirebaseStorageService.name);
-    private bucket: Bucket;
+    private bucket?: Bucket;
+    private bucketUrl = '';
     private storageInitialized = false;
-    private bucketUrl: string;
 
-    constructor(private configService: ConfigService) {
+    constructor(private readonly configService: ConfigService) {
         this.initializeStorage();
     }
 
-    private initializeStorage() {
+    private initializeStorage(): void {
         try {
             const storageBucket = this.configService.get<string>(
-                'firebase.storageBucket'
+                FILE_STORAGE_CONFIG_PATH.FIREBASE.STORAGE_BUCKET,
             );
-            this.bucketUrl = this.configService.get<string>(
-                'firebase.storageBucketUrl'
+            const bucketUrl = this.configService.get<string>(
+                FILE_STORAGE_CONFIG_PATH.FIREBASE.STORAGE_BUCKET_URL,
             );
 
-            if (!storageBucket) {
-                this.logger.warn('Firebase storage bucket is not configured');
+            if (!storageBucket || !bucketUrl) {
+                this.logger.warn(
+                    'Firebase storage is not configured (bucket or public URL missing)',
+                );
                 return;
             }
 
+            this.bucketUrl = bucketUrl.replace(/\/$/, '');
+
             if (!admin.apps.length) {
-                const projectId =
-                    this.configService.get<string>('firebase.projectId');
+                const projectId = this.configService.get<string>(
+                    FILE_STORAGE_CONFIG_PATH.FIREBASE.PROJECT_ID,
+                );
                 const clientEmail = this.configService.get<string>(
-                    'firebase.clientEmail'
+                    FILE_STORAGE_CONFIG_PATH.FIREBASE.CLIENT_EMAIL,
                 );
                 const privateKey = this.configService.get<string>(
-                    'firebase.privateKey'
+                    FILE_STORAGE_CONFIG_PATH.FIREBASE.PRIVATE_KEY,
                 );
 
                 if (!projectId || !clientEmail || !privateKey) {
                     this.logger.warn(
-                        'Firebase credentials are incomplete. Firebase storage will not work.'
+                        'Firebase credentials are incomplete. Storage uploads are disabled.',
                     );
                     return;
                 }
@@ -56,209 +63,186 @@ export class FirebaseStorageService {
                     ? privateKey.replace(/\\n/g, '\n')
                     : privateKey;
 
-                try {
-                    admin.initializeApp({
-                        credential: admin.credential.cert({
-                            projectId,
-                            clientEmail,
-                            privateKey: formattedPrivateKey,
-                        }),
-                        storageBucket: storageBucket,
-                    });
-                    // this.logger.log(
-                    //     'Firebase Admin SDK initialized successfully'
-                    // );
-                } catch (error) {
-                    this.logger.error(
-                        `Failed to initialize Firebase: ${error.message}`
-                    );
-                    return;
-                }
+                admin.initializeApp({
+                    credential: admin.credential.cert({
+                        projectId,
+                        clientEmail,
+                        privateKey: formattedPrivateKey,
+                    }),
+                    storageBucket,
+                });
             }
 
             this.bucket = admin.storage().bucket(storageBucket);
             this.storageInitialized = true;
         } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
             this.logger.error(
-                `Failed to initialize Firebase Storage: ${error.message}`
+                `Failed to initialize Firebase Storage: ${message}`,
             );
         }
     }
 
-    private checkStorageInitialized(): void {
+    private assertReady(): void {
         if (!this.storageInitialized || !this.bucket) {
-            throw new Error('Firebase Storage not initialized');
+            throw new Error('Firebase Storage is not initialized');
         }
     }
 
-    private generateFileName(
+    private generateObjectKey(
         originalName: string,
         path: string,
-        pathPrefix: string
+        pathPrefix: string,
     ): string {
-        const fileExtension = extname(originalName);
-        return `${path}/${pathPrefix}/${uuidv4()}${fileExtension}`;
+        return `${path}/${pathPrefix}/${uuidv4()}${extname(originalName)}`;
     }
 
     async uploadFile(
         file: IFile,
-        path: string = 'uploads',
-        pathPrefix: string = 'uploads'
-    ): Promise<string> {
-        this.checkStorageInitialized();
-        if (!file || !file.buffer) {
-            return;
+        path: string = FILE_STORAGE_DEFAULTS.UPLOAD_PATH,
+        pathPrefix: string = FILE_STORAGE_DEFAULTS.PATH_PREFIX,
+    ): Promise<string | undefined> {
+        this.assertReady();
+
+        if (!file?.buffer) {
+            return undefined;
         }
 
-        try {
-            const fileName = this.generateFileName(
-                file.originalname,
-                path,
-                pathPrefix
-            );
-            const fileRef = this.bucket.file(fileName);
+        const objectKey = this.generateObjectKey(
+            file.originalname,
+            path,
+            pathPrefix,
+        );
+        const fileRef = this.bucket!.file(objectKey);
 
-            const metadata = {
+        const stream = Readable.from(file.buffer);
+        const writeStream = fileRef.createWriteStream({
+            metadata: {
                 contentType: file.mimetype,
                 cacheControl: 'public, max-age=31536000',
                 metadata: {
                     originalName: file.originalname,
-                    uploadTimestamp: Date.now(),
+                    uploadTimestamp: String(Date.now()),
                 },
-            };
+            },
+            resumable: file.buffer.length > FILE_STORAGE_DEFAULTS.CHUNK_SIZE_BYTES,
+            chunkSize: FILE_STORAGE_DEFAULTS.CHUNK_SIZE_BYTES,
+            public: true,
+        });
 
-            const options = {
-                metadata,
-                resumable: file.buffer.length > CHUNK_SIZE,
-                chunkSize: CHUNK_SIZE,
-                public: true,
-            };
+        await new Promise<void>((resolve, reject) => {
+            stream
+                .pipe(writeStream)
+                .on('error', reject)
+                .on('finish', () => resolve());
+        });
 
-            const stream = Readable.from(file.buffer);
-            const writeStream = fileRef.createWriteStream(options);
-
-            await new Promise((resolve, reject) => {
-                stream
-                    .pipe(writeStream)
-                    .on('error', error => {
-                        this.logger.error(`Stream error: ${error.message}`);
-                        reject(error);
-                    })
-                    .on('finish', resolve);
-            });
-
-            const publicUrl = `${this.bucketUrl}/${fileName}`;
-            return publicUrl;
-        } catch (error) {
-            this.logger.error(`Error uploading file: ${error.message}`);
-            throw new Error(`File upload failed: ${error.message}`);
-        }
+        return `${this.bucketUrl}/${objectKey}`;
     }
 
     async uploadMultipleFiles(
         files: IFile[],
         path: string,
-        pathPrefix: string[] = []
+        pathPrefix: string[] = [],
     ): Promise<string[]> {
-        if (!files || files.length === 0) {
-            return [];
-        }
+        return this.processBatchedUploads(files, (file, index) => {
+            const prefix =
+                pathPrefix.length > 1
+                    ? (pathPrefix[index] ?? FILE_STORAGE_DEFAULTS.PATH_PREFIX)
+                    : (pathPrefix[0] ?? FILE_STORAGE_DEFAULTS.PATH_PREFIX);
 
-        const results: string[] = [];
-        const errors: Error[] = [];
-
-        for (let i = 0; i < files.length; i += PARALLEL_UPLOAD_LIMIT) {
-            const batch = files.slice(i, i + PARALLEL_UPLOAD_LIMIT);
-            const batchPromises = batch.map((file, index) => {
-                const actualIndex = i + index;
-                const prefix =
-                    pathPrefix.length > 1
-                        ? pathPrefix[i + index]
-                        : pathPrefix[0];
-                return this.uploadFile(file, path, prefix)
-                    .then(url => (results[actualIndex] = url))
-                    .catch(error => {
-                        errors.push(error);
-                        return null;
-                    });
-            });
-
-            await Promise.all(batchPromises);
-        }
-
-        if (errors.length > 0) {
-            this.logger.warn(
-                `${errors.length} files failed to upload out of ${files.length}`
-            );
-        }
-
-        return results;
+            return this.uploadFile(file, path, prefix);
+        });
     }
 
     async fastUploadMultipleFiles(
         files: IFile[],
         path: string,
-        pathPrefix: string[] = []
+        pathPrefix: string[] = [],
     ): Promise<string[]> {
-        if (!files || files.length === 0) {
+        if (!files.length) {
             return [];
         }
 
-        const uploadPromises = files.map((file, index) => {
-            const prefix = pathPrefix[index] || 'uploads';
-            return this.uploadFile(file, path, prefix);
-        });
-
-        return Promise.all(uploadPromises);
+        return Promise.all(
+            files.map((file, index) =>
+                this.uploadFile(
+                    file,
+                    path,
+                    pathPrefix[index] ?? FILE_STORAGE_DEFAULTS.PATH_PREFIX,
+                ),
+            ),
+        ).then(results =>
+            results.filter((url): url is string => Boolean(url)),
+        );
     }
 
     async deleteFile(fileUrl: string): Promise<void> {
-        this.checkStorageInitialized();
+        this.assertReady();
+
         if (!fileUrl) {
             return;
         }
 
-        try {
-            const fileName = fileUrl.replace(`${this.bucketUrl}/`, '');
+        const objectKey = fileUrl.replace(`${this.bucketUrl}/`, '');
+        const fileRef = this.bucket!.file(objectKey);
+        const [exists] = await fileRef.exists();
 
-            const [exists] = await this.bucket.file(fileName).exists();
-            if (!exists) {
-                this.logger.warn(`File ${fileName} does not exist`);
-                return;
-            }
-
-            await this.bucket.file(fileName).delete();
-        } catch (error) {
-            this.logger.error(`Error deleting file: ${error.message}`);
-            throw new Error(`File deletion failed: ${error.message}`);
-        }
-    }
-
-    async deleteMultipleFiles(fileUrls: string[]): Promise<void> {
-        if (!fileUrls || fileUrls.length === 0) {
+        if (!exists) {
+            this.logger.warn(`Firebase object not found: ${objectKey}`);
             return;
         }
 
-        const errors: Error[] = [];
+        await fileRef.delete();
+    }
 
-        for (let i = 0; i < fileUrls.length; i += PARALLEL_UPLOAD_LIMIT) {
-            const batch = fileUrls.slice(i, i + PARALLEL_UPLOAD_LIMIT);
-            const batchPromises = batch.map(url =>
-                this.deleteFile(url).catch(error => {
-                    errors.push(error);
-                    return null;
-                })
-            );
-
-            await Promise.all(batchPromises);
+    async deleteMultipleFiles(fileUrls: string[]): Promise<void> {
+        if (!fileUrls.length) {
+            return;
         }
 
-        if (errors.length > 0) {
-            this.logger.warn(
-                `${errors.length} files failed to delete out of ${fileUrls.length}`
+        await this.processBatchedDeletes(fileUrls, url => this.deleteFile(url));
+    }
+
+    private async processBatchedUploads(
+        files: IFile[],
+        uploadFn: (file: IFile, index: number) => Promise<string | undefined>,
+    ): Promise<string[]> {
+        if (!files.length) {
+            return [];
+        }
+
+        const results: string[] = [];
+        const batchSize = FILE_STORAGE_DEFAULTS.PARALLEL_BATCH_SIZE;
+
+        for (let offset = 0; offset < files.length; offset += batchSize) {
+            const batch = files.slice(offset, offset + batchSize);
+            const batchResults = await Promise.all(
+                batch.map((file, batchIndex) =>
+                    uploadFn(file, offset + batchIndex),
+                ),
             );
-        } else {
-            this.logger.log(`${fileUrls.length} files deleted successfully`);
+
+            batchResults.forEach((url, batchIndex) => {
+                if (url) {
+                    results[offset + batchIndex] = url;
+                }
+            });
+        }
+
+        return results.filter(Boolean);
+    }
+
+    private async processBatchedDeletes(
+        fileUrls: string[],
+        deleteFn: (fileUrl: string) => Promise<void>,
+    ): Promise<void> {
+        const batchSize = FILE_STORAGE_DEFAULTS.PARALLEL_BATCH_SIZE;
+
+        for (let offset = 0; offset < fileUrls.length; offset += batchSize) {
+            const batch = fileUrls.slice(offset, offset + batchSize);
+            await Promise.all(batch.map(url => deleteFn(url)));
         }
     }
 }

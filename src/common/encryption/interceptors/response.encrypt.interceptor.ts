@@ -30,15 +30,13 @@ export class ResponseEncryptInterceptor implements NestInterceptor {
         private readonly reflector: Reflector
     ) {
         this.encryptionKey =
-            this.configService.get<string>('encryption.aes.key');
-        this.fallbackIv = this.configService.get<string>('encryption.aes.iv');
-        this.encryptionEnabled = this.configService.get<boolean>(
-            'encryption.aes.enable'
-        );
-        this.useRandomIv =
-            this.configService.get<boolean>('encryption.aes.useRandomIv') ??
-            true;
-        this.appEnv = this.configService.get<string>('app.env');
+            this.configService.get<string>('encryption.aes.key') ?? '';
+        this.fallbackIv =
+            this.configService.get<string>('encryption.aes.iv') ?? '';
+        this.encryptionEnabled =
+            this.configService.get<boolean>('encryption.aes.enable') ?? false;
+        this.useRandomIv = true;
+        this.appEnv = this.configService.get<string>('app.env') ?? '';
 
         if (this.encryptionEnabled) {
             if (!this.encryptionKey) {

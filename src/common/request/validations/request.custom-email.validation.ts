@@ -21,9 +21,9 @@ export class IsCustomEmailConstraint implements ValidatorConstraintInterface {
 
     defaultMessage(validationArguments?: ValidationArguments): string {
         const validated = this.helperStringService.checkCustomEmail(
-            validationArguments.value
+            validationArguments?.value ?? '',
         );
-        return validated.message;
+        return validated.message ?? 'request.invalidEmail';
     }
 }
 
