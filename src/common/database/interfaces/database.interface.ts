@@ -66,7 +66,7 @@ export type IDatabaseDeleteManyOptions = Pick<
 // Raw
 export type IDatabaseAggregateOptions = Pick<
     IDatabaseOptions,
-    'session' | 'withDeleted'
+    'session' | 'withDeleted' | 'withAllData'
 >;
 export type IDatabaseFindAllAggregateOptions = Omit<
     IDatabaseFindAllOptions,

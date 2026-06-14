@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Inject } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import {
@@ -8,14 +7,14 @@ import {
     UpdateResult,
 } from 'mongodb';
 import {
-    FilterQuery,
+    QueryFilter,
     Model,
     PipelineStage,
     PopulateOptions,
     UpdateQuery,
     UpdateWithAggregationPipeline,
 } from 'mongoose';
-import { DatabaseEntityBase } from 'src/common/database/bases/database.entity';
+import { DatabaseEntityBase } from 'src/common/database/entities/database.entity';
 import {
     DATABASE_AUDIT_FIELD
 } from 'src/common/database/constants/database.constant';
@@ -161,7 +160,7 @@ export abstract class DatabaseRepositoryBase<
             repository.session(options.session);
         }
 
-        return repository.exec();
+        return repository.exec() as Promise<T[]>;
     }
 
     async findOne<T = EntityDocument>(
@@ -197,7 +196,7 @@ export abstract class DatabaseRepositoryBase<
             repository.session(options.session);
         }
 
-        return repository.exec();
+        return repository.exec() as Promise<T>;
     }
 
     async findOneById<T = EntityDocument>(
@@ -231,7 +230,7 @@ export abstract class DatabaseRepositoryBase<
             repository.session(options.session);
         }
 
-        return repository.exec();
+        return repository.exec() as Promise<T>;
     }
 
     async findOneAndLock<T = EntityDocument>(
@@ -271,7 +270,7 @@ export abstract class DatabaseRepositoryBase<
             repository.session(options.session);
         }
 
-        return repository.exec();
+        return repository.exec() as Promise<T>;
     }
 
     async findOneByIdAndLock<T = EntityDocument>(
@@ -311,7 +310,7 @@ export abstract class DatabaseRepositoryBase<
             repository.session(options.session);
         }
 
-        return repository.exec();
+        return repository.exec() as Promise<T>;
     }
 
     async getTotal(
@@ -375,8 +374,8 @@ export abstract class DatabaseRepositoryBase<
         data: T,
         options?: IDatabaseCreateOptions
     ): Promise<EntityDocument> {
-        data[DATABASE_AUDIT_FIELD.CREATED_BY] = this.getCurrentUserId();
-        const created = await this._repository.create([data], options);
+        data[DATABASE_AUDIT_FIELD.CREATED_BY] = this.getCurrentUserId() ?? undefined;
+        const created = await this._repository.create([data as any], options);
 
         return created[0] as any;
     }
@@ -387,7 +386,7 @@ export abstract class DatabaseRepositoryBase<
         data: UpdateQuery<Entity> | UpdateWithAggregationPipeline,
         options?: IDatabaseUpdateOptions
     ): Promise<EntityDocument> {
-        data[DATABASE_AUDIT_FIELD.UPDATED_BY] = this.getCurrentUserId();
+        (data as Record<string, any>)[DATABASE_AUDIT_FIELD.UPDATED_BY] = this.getCurrentUserId() ?? undefined;
 
         const deletedFilter = this.buildDeletedFilter(options);
 
@@ -412,7 +411,9 @@ export abstract class DatabaseRepositoryBase<
         byType?: string,
         options?: IDatabaseUpdateOptions
     ): Promise<EntityDocument> {
-        data[byType] = this.getCurrentUserId();
+        if (byType) {
+            (data as Record<string, any>)[byType] = this.getCurrentUserId() ?? undefined;
+        }
         return this._repository.findOneAndUpdate(
             {
                 ...find,
@@ -423,7 +424,7 @@ export abstract class DatabaseRepositoryBase<
                 ...options,
                 new: true,
             }
-        );
+        ) as Promise<EntityDocument>;
     }
 
     async delete(
@@ -465,7 +466,7 @@ export abstract class DatabaseRepositoryBase<
     ): Promise<EntityDocument> {
         const deletedFilter = this.buildDeletedFilter(
             options
-        ) as FilterQuery<Entity>;
+        ) as QueryFilter<Entity>;
         return this._repository.findOneAndUpdate(
             {
                 ...find,
@@ -480,7 +481,7 @@ export abstract class DatabaseRepositoryBase<
                 ...options,
                 new: true,
             }
-        );
+        ) as Promise<EntityDocument>;
     }
 
     // Approve
@@ -503,7 +504,7 @@ export abstract class DatabaseRepositoryBase<
                 ...options,
                 new: true,
             }
-        );
+        ) as Promise<EntityDocument>;
     }
 
     async restore(
@@ -571,10 +572,10 @@ export abstract class DatabaseRepositoryBase<
                 deleted: options?.withDeleted ?? false,
             },
             {
-                $set: data,
+                $set: data as UpdateQuery<Entity>,
             },
-            { ...options, rawResult: true }
-        );
+            { ...options, rawResult: true } as any
+        ) as Promise<UpdateResult<Entity>>;
     }
 
     async updateManyRaw(
@@ -588,8 +589,8 @@ export abstract class DatabaseRepositoryBase<
                 deleted: options?.withDeleted ?? false,
             },
             data,
-            { ...options, rawResult: true }
-        );
+            { ...options, rawResult: true } as any
+        ) as Promise<UpdateResult<Entity>>;
     }
 
     async deleteMany(
@@ -601,8 +602,8 @@ export abstract class DatabaseRepositoryBase<
                 ...find,
                 deleted: options?.withDeleted ?? false,
             },
-            { ...options, rawResult: true }
-        );
+            { ...options, rawResult: true } as any
+        ) as Promise<DeleteResult>;
     }
 
     async softDeleteMany(
@@ -619,7 +620,7 @@ export abstract class DatabaseRepositoryBase<
                 [DATABASE_AUDIT_FIELD.DELETED_AT]: new Date(),
                 [DATABASE_AUDIT_FIELD.DELETED]: true,
             },
-            { ...options, rawResult: true }
+            { ...options, rawResult: true } as any
         );
     }
 
@@ -639,7 +640,7 @@ export abstract class DatabaseRepositoryBase<
                     deletedBy: undefined,
                 },
             },
-            { ...options, rawResult: true }
+            { ...options, rawResult: true } as any
         );
     }
 
@@ -695,13 +696,13 @@ export abstract class DatabaseRepositoryBase<
         ];
 
         if (options?.order) {
-            const keysOrder = Object.keys(options?.order);
+            const keysOrder = Object.keys(options.order);
+            const order = options.order;
             newPipelines.push({
                 $sort: keysOrder.reduce(
                     (a, b) => ({
                         ...a,
-                        [b]:
-                            options?.order[b] ===
+                        [b]: order[b] ===
                             ENUM_PAGINATION_ORDER_DIRECTION_TYPE.ASC
                                 ? 1
                                 : -1,
@@ -713,10 +714,8 @@ export abstract class DatabaseRepositoryBase<
 
         if (options?.paging) {
             newPipelines.push(
-                { $skip: options.paging.offset },
-                {
-                    $limit: options.paging.limit,
-                }
+                { $skip: options.paging.offset ?? 0 },
+                { $limit: options.paging.limit ?? 0 }
             );
         }
 
@@ -969,6 +968,9 @@ export abstract class DatabaseRepositoryBase<
             }
 
             const lookupOrder = lookupOrdersMap.get(alias);
+            if (!lookupOrder) {
+                continue;
+            }
             lookupOrder[field] = direction as 1 | -1;
         }
 
@@ -984,6 +986,7 @@ export abstract class DatabaseRepositoryBase<
         options?: IDatabaseFindAllOptions,
         fieldName?: string
     ): Promise<T[]> {
+        fieldName = this.resolveFieldName(fieldName);
         const lookups = Array.isArray(lookupOptions)
             ? lookupOptions
             : lookupOptions
@@ -1254,6 +1257,9 @@ export abstract class DatabaseRepositoryBase<
                     });
                 } else {
                     // Normal lookup
+                    if (!lookup.localField) {
+                        continue;
+                    }
                     const localIdsExpression = this.buildLocalIdsExpression(
                         lookup.localField,
                         fieldName
@@ -1753,7 +1759,7 @@ export abstract class DatabaseRepositoryBase<
                     lookup,
                 };
             })
-            .filter(Boolean);
+            .filter((item): item is NonNullable<typeof item> => item !== null);
 
         if (lookupConditions.length > 0) {
             pipeline.push({
@@ -1834,6 +1840,7 @@ export abstract class DatabaseRepositoryBase<
         options?: IDatabaseFindAllOptions,
         fieldName?: string
     ): Promise<T[]> {
+        fieldName = this.resolveFieldName(fieldName);
         const lookups = this.normalizeLookupOptions(lookupOptions);
         const { pipeline, hasLookupOrder } = this.buildFindAllPipeline(
             find,
@@ -1903,7 +1910,7 @@ export abstract class DatabaseRepositoryBase<
 
         collect(document, 0);
 
-        return values.filter(Boolean);
+        return values.filter((item): item is NonNullable<typeof item> => item !== null);
     }
 
     /**
@@ -1914,6 +1921,7 @@ export abstract class DatabaseRepositoryBase<
         options: IDatabaseFindAllOptions | undefined,
         fieldName?: string
     ): { pipeline: PipelineStage[]; hasLookupOrder: boolean } {
+        fieldName = this.resolveFieldName(fieldName);
         let isPagingWithLastTime = false;
         const pipeline: PipelineStage[] = [
             {
@@ -1992,6 +2000,7 @@ export abstract class DatabaseRepositoryBase<
         options: IDatabaseFindAllOptions | undefined,
         fieldName?: string
     ): Promise<Record<string, any>> {
+        fieldName = this.resolveFieldName(fieldName);
         const mainAggregation = options?.session
             ? this._repository.aggregate(pipeline).session(options.session)
             : this._repository.aggregate(pipeline);
@@ -2009,6 +2018,7 @@ export abstract class DatabaseRepositoryBase<
         options: IDatabaseFindAllOptions | undefined,
         fieldName?: string
     ): void {
+        fieldName = this.resolveFieldName(fieldName);
         const orderEntries = options?.order
             ? Object.entries(options.order)
             : [];
@@ -2121,6 +2131,7 @@ export abstract class DatabaseRepositoryBase<
         hasLookupOrder: boolean,
         fieldName?: string
     ): void {
+        fieldName = this.resolveFieldName(fieldName);
         if (!hasLookupOrder || !options?.paging) return;
 
         const docs: any[] = result[fieldName] || [];
@@ -2142,7 +2153,8 @@ export abstract class DatabaseRepositoryBase<
         lookupOptions?: ILookupOption | ILookupOption[],
         options?: IDatabaseFindAllOptions,
         fieldName?: string
-    ): Promise<T> {
+    ): Promise<T | null> {
+        fieldName = this.resolveFieldName(fieldName);
         const lookups = Array.isArray(lookupOptions)
             ? lookupOptions
             : lookupOptions
@@ -2231,7 +2243,8 @@ export abstract class DatabaseRepositoryBase<
         lookupOptions?: ILookupOption | ILookupOption[],
         options?: IDatabaseFindAllOptions,
         fieldName?: string
-    ): Promise<T> {
+    ): Promise<T | null> {
+        fieldName = this.resolveFieldName(fieldName);
         const mainPipeline: PipelineStage[] = [
             {
                 $match: {
@@ -2300,7 +2313,7 @@ export abstract class DatabaseRepositoryBase<
                     .flatMap(doc =>
                         this.extractFieldValues(doc, sourceField as string)
                     )
-                    .filter(Boolean);
+                    .filter((item): item is NonNullable<typeof item> => item !== null);
             } else {
                 const docs = Array.isArray(result[fieldName])
                     ? result[fieldName]
@@ -2312,7 +2325,7 @@ export abstract class DatabaseRepositoryBase<
                             lookup.localField as string
                         )
                     )
-                    .filter(Boolean);
+                    .filter((item): item is NonNullable<typeof item> => item !== null);
             }
 
             // Loại bỏ trùng
@@ -2623,15 +2636,19 @@ export abstract class DatabaseRepositoryBase<
 
     private buildDeletedFilter(
         options?: IDatabaseOptions
-    ): FilterQuery<Entity> {
+    ): QueryFilter<Entity> {
         if (options?.withAvailableDataAndNotDeleted) {
             return {
                 $or: [{ deleted: false }, { deleted: { $exists: false } }],
-            } as FilterQuery<Entity>;
+            } as QueryFilter<Entity>;
         }
 
         return {
             deleted: options?.withDeleted ?? false,
-        } as FilterQuery<Entity>;
+        } as QueryFilter<Entity>;
+    }
+
+    protected resolveFieldName(fieldName?: string): string {
+        return fieldName ?? 'data';
     }
 }
