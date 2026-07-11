@@ -32,8 +32,10 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/mongoose": "^11.0.4",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.28",
     "@nestjs/swagger": "^11.4.4",
     "@nestjs/throttler": "^6.5.0",
+    "@nestjs/websockets": "^11.1.28",
     "@swc/cli": "^0.8.1",
     "@swc/core": "^1.15.24",
     "@types/bcryptjs": "^2.4.6",
@@ -55,6 +57,7 @@
     "nestjs-i18n": "^10.8.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3",
     "uuid": "^14.0.0",
     "xlsx": "^0.18.5"
   },

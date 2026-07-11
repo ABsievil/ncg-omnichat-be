@@ -11,6 +11,8 @@ import { CommonModule } from 'src/common/common.module';
 import { MIDDLEWARE_CONFIG_PATH } from 'src/common/request/constants/middleware-config-path.constant';
 import configs from 'src/configs';
 import { AppRouterModule } from 'src/router/router.module';
+import { AuthModule } from 'src/modules/auth/auth.module';
+import { JwtAuthGuard } from 'src/modules/auth/guards/jwt.auth.guard';
 
 @Module({
   imports: [
@@ -35,9 +37,13 @@ import { AppRouterModule } from 'src/router/router.module';
       }),
     }),
     CommonModule,
+    AuthModule,
     AppMiddlewareModule,
     AppRouterModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
 })
 export class AppModule {}

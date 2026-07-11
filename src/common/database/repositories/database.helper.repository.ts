@@ -35,7 +35,7 @@ import {
     PAGINATION_DEFAULT_ORDER_DIRECTION,
 } from 'src/common/pagination/constants/pagination.constant';
 import { ENUM_PAGINATION_ORDER_DIRECTION_TYPE } from 'src/common/pagination/enums/pagination.enum';
-import type { IRequestWithContext } from 'src/common/request/interfaces/request-with-context.interface';
+import type { IRequestApp } from 'src/common/request/interfaces/request.interface';
 
 export abstract class DatabaseRepositoryBaseHelper<
     Entity extends DatabaseEntityBase,
@@ -44,7 +44,7 @@ export abstract class DatabaseRepositoryBaseHelper<
     protected readonly _repository: Model<Entity>;
     readonly _join?: PopulateOptions | (string | PopulateOptions)[];
 
-    @Inject(REQUEST) public readonly _request: IRequestWithContext;
+    @Inject(REQUEST) public readonly _request: IRequestApp;
 
     constructor(
         repository: Model<Entity>,

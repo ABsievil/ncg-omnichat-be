@@ -7,6 +7,7 @@ export interface IRequestApp<T = any> extends Request {
     __user?: any;
     __language: string;
     __version: string;
+    requestId?: string;
 
     __pagination?: IPaginationRequestMetadata;
 }

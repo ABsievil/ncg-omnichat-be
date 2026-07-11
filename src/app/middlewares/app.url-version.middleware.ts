@@ -6,14 +6,14 @@ import {
   ERROR_RESPONSE_DEFAULT,
 } from 'src/common/response/constants/error-response.constant';
 import { MIDDLEWARE_CONFIG_PATH } from 'src/common/request/constants/middleware-config-path.constant';
-import type { IRequestWithContext } from 'src/common/request/interfaces/request-with-context.interface';
+import type { IRequestApp } from 'src/common/request/interfaces/request.interface';
 
 @Injectable()
 export class AppUrlVersionMiddleware implements NestMiddleware {
   constructor(private readonly configService: ConfigService) {}
 
   use(
-    req: IRequestWithContext,
+    req: IRequestApp,
     _res: Response,
     next: NextFunction,
   ): void {
