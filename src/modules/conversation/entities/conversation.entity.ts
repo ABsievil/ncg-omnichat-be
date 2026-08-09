@@ -11,7 +11,8 @@ import { ENUM_CONVERSATION_TYPE } from 'src/modules/conversation/enums/conversat
 export class ConversationEntity extends DatabaseEntityBase {
   @DatabaseProp({
     required: true,
-    enum: ENUM_CONVERSATION_TYPE,
+    type: String,
+    enum: Object.values(ENUM_CONVERSATION_TYPE),
     index: true,
   })
   type: ENUM_CONVERSATION_TYPE;
@@ -23,10 +24,10 @@ export class ConversationEntity extends DatabaseEntityBase {
   })
   memberIds: string[];
 
-  @DatabaseProp({ required: false, default: null })
+  @DatabaseProp({ required: false, type: String, default: null })
   name?: string | null;
 
-  @DatabaseProp({ required: false, default: null })
+  @DatabaseProp({ required: false, type: String, default: null })
   avatarUrl?: string | null;
 
   @DatabaseProp({
@@ -63,7 +64,13 @@ export class ConversationEntity extends DatabaseEntityBase {
   };
 
   /** For direct chats: sorted "userA:userB" for uniqueness */
-  @DatabaseProp({ required: false, unique: true, sparse: true, index: true })
+  @DatabaseProp({
+    required: false,
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true,
+  })
   directKey?: string | null;
 }
 

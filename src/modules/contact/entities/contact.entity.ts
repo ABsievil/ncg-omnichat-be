@@ -17,7 +17,8 @@ export class ContactEntity extends DatabaseEntityBase {
 
   @DatabaseProp({
     required: true,
-    enum: ENUM_CONTACT_STATUS,
+    type: String,
+    enum: Object.values(ENUM_CONTACT_STATUS),
     default: ENUM_CONTACT_STATUS.PENDING,
     index: true,
   })

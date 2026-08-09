@@ -17,7 +17,8 @@ export class ConversationMemberEntity extends DatabaseEntityBase {
 
   @DatabaseProp({
     required: true,
-    enum: ENUM_MEMBER_ROLE,
+    type: String,
+    enum: Object.values(ENUM_MEMBER_ROLE),
     default: ENUM_MEMBER_ROLE.MEMBER,
   })
   role: ENUM_MEMBER_ROLE;
@@ -31,7 +32,7 @@ export class ConversationMemberEntity extends DatabaseEntityBase {
   @DatabaseProp({ required: false, default: 0 })
   unreadCount?: number;
 
-  @DatabaseProp({ required: false, default: null })
+  @DatabaseProp({ required: false, type: String, default: null })
   lastReadMessageId?: string | null;
 
   @DatabaseProp({ required: false, default: false })

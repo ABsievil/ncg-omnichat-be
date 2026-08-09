@@ -32,12 +32,14 @@ export class UserEntity extends DatabaseEntityBase {
 
   @DatabaseProp({
     required: false,
+    type: String,
     default: null,
   })
   avatarUrl?: string | null;
 
   @DatabaseProp({
     required: false,
+    type: String,
     default: null,
   })
   coverUrl?: string | null;
@@ -51,7 +53,8 @@ export class UserEntity extends DatabaseEntityBase {
 
   @DatabaseProp({
     required: false,
-    enum: ENUM_USER_GENDER,
+    type: String,
+    enum: Object.values(ENUM_USER_GENDER),
     default: ENUM_USER_GENDER.UNKNOWN,
   })
   gender?: ENUM_USER_GENDER;

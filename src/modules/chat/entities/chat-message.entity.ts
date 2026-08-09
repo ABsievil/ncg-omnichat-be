@@ -20,7 +20,8 @@ export class ChatMessageEntity extends DatabaseEntityBase {
 
   @DatabaseProp({
     required: true,
-    enum: ENUM_MESSAGE_TYPE,
+    type: String,
+    enum: Object.values(ENUM_MESSAGE_TYPE),
     default: ENUM_MESSAGE_TYPE.TEXT,
   })
   type: ENUM_MESSAGE_TYPE;
@@ -28,13 +29,13 @@ export class ChatMessageEntity extends DatabaseEntityBase {
   @DatabaseProp({ required: false, default: '' })
   content?: string;
 
-  @DatabaseProp({ required: false, default: null })
+  @DatabaseProp({ required: false, type: String, default: null })
   mediaUrl?: string | null;
 
   @DatabaseProp({ required: false, type: Object, default: null })
   mediaMeta?: Record<string, any> | null;
 
-  @DatabaseProp({ required: false, default: null })
+  @DatabaseProp({ required: false, type: String, default: null })
   replyToMessageId?: string | null;
 
   @DatabaseProp({
@@ -52,7 +53,8 @@ export class ChatMessageEntity extends DatabaseEntityBase {
 
   @DatabaseProp({
     required: true,
-    enum: ENUM_MESSAGE_STATUS,
+    type: String,
+    enum: Object.values(ENUM_MESSAGE_STATUS),
     default: ENUM_MESSAGE_STATUS.SENT,
   })
   status: ENUM_MESSAGE_STATUS;
@@ -63,7 +65,7 @@ export class ChatMessageEntity extends DatabaseEntityBase {
   @DatabaseProp({ required: false, type: [String], default: [] })
   deletedFor?: string[];
 
-  @DatabaseProp({ required: false, default: null })
+  @DatabaseProp({ required: false, type: String, default: null })
   clientMsgId?: string | null;
 
   @DatabaseProp({ required: false, type: Object, default: null })
