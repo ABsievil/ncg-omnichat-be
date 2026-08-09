@@ -244,9 +244,10 @@ export abstract class DatabaseRepositoryBase<
                 ...find,
                 deleted: options?.withDeleted ?? false,
             },
+            {},
             {
-                new: true,
-                useFindAndModify: false,
+                returnDocument: 'after',
+                ...(options?.session ? { session: options.session } : {}),
             }
         );
 
@@ -266,10 +267,6 @@ export abstract class DatabaseRepositoryBase<
 
         if (options?.order) {
             repository.sort(options.order);
-        }
-
-        if (options?.session) {
-            repository.session(options.session);
         }
 
         return repository.exec() as Promise<T>;
@@ -284,9 +281,10 @@ export abstract class DatabaseRepositoryBase<
                 _id,
                 deleted: options?.withDeleted ?? false,
             },
+            {},
             {
-                new: true,
-                useFindAndModify: false,
+                returnDocument: 'after',
+                ...(options?.session ? { session: options.session } : {}),
             }
         );
 
@@ -306,10 +304,6 @@ export abstract class DatabaseRepositoryBase<
 
         if (options?.order) {
             repository.sort(options.order);
-        }
-
-        if (options?.session) {
-            repository.session(options.session);
         }
 
         return repository.exec() as Promise<T>;
@@ -400,7 +394,7 @@ export abstract class DatabaseRepositoryBase<
             data,
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
             }
         )) as EntityDocument;
 
@@ -424,7 +418,7 @@ export abstract class DatabaseRepositoryBase<
             data,
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
             }
         ) as Promise<EntityDocument>;
     }
@@ -440,7 +434,7 @@ export abstract class DatabaseRepositoryBase<
             },
             {
                 ...options,
-                new: false,
+                returnDocument: 'before',
             }
         )) as EntityDocument;
 
@@ -481,7 +475,7 @@ export abstract class DatabaseRepositoryBase<
             },
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
             }
         ) as Promise<EntityDocument>;
     }
@@ -504,7 +498,7 @@ export abstract class DatabaseRepositoryBase<
             },
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
             }
         ) as Promise<EntityDocument>;
     }

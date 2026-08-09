@@ -213,9 +213,10 @@ export abstract class DatabaseRepositoryBaseHelper<
                 ...find,
                 deleted: options?.withDeleted ?? false,
             },
+            {},
             {
-                new: true,
-                useFindAndModify: false,
+                returnDocument: 'after',
+                ...(options?.session ? { session: options.session } : {}),
             }
         );
 
@@ -235,10 +236,6 @@ export abstract class DatabaseRepositoryBaseHelper<
 
         if (options?.order) {
             repository.sort(options.order);
-        }
-
-        if (options?.session) {
-            repository.session(options.session);
         }
 
         return repository.exec() as Promise<T>;
@@ -253,9 +250,10 @@ export abstract class DatabaseRepositoryBaseHelper<
                 _id,
                 deleted: options?.withDeleted ?? false,
             },
+            {},
             {
-                new: true,
-                useFindAndModify: false,
+                returnDocument: 'after',
+                ...(options?.session ? { session: options.session } : {}),
             }
         );
 
@@ -275,10 +273,6 @@ export abstract class DatabaseRepositoryBaseHelper<
 
         if (options?.order) {
             repository.sort(options.order);
-        }
-
-        if (options?.session) {
-            repository.session(options.session);
         }
 
         return repository.exec() as Promise<T>;
@@ -366,7 +360,7 @@ export abstract class DatabaseRepositoryBaseHelper<
             data,
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
             }
         ) as Promise<EntityDocument>;
     }
@@ -388,7 +382,7 @@ export abstract class DatabaseRepositoryBaseHelper<
             data,
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
                 upsert: true,
             }
         ) as Promise<EntityDocument>;
@@ -405,7 +399,7 @@ export abstract class DatabaseRepositoryBaseHelper<
             },
             {
                 ...options,
-                new: false,
+                returnDocument: 'before',
             }
         ) as Promise<EntityDocument>;
     }
@@ -441,7 +435,7 @@ export abstract class DatabaseRepositoryBaseHelper<
             },
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
             }
         ) as Promise<EntityDocument>;
     }
@@ -464,7 +458,7 @@ export abstract class DatabaseRepositoryBaseHelper<
             },
             {
                 ...options,
-                new: true,
+                returnDocument: 'after',
             }
         ) as Promise<EntityDocument>;
     }
