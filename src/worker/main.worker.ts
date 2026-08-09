@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { ContextIdFactory, NestFactory } from '@nestjs/core';
 import { WorkerModule } from 'src/worker/worker.module';
+import { ZaloListenerService } from 'src/worker/zalo-listener.service';
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(WorkerModule, {
@@ -8,6 +9,17 @@ async function bootstrap() {
   });
 
   const logger = new Logger('ZaloWorker');
+
+  /**
+   * Repositories inject REQUEST (even optionally), so Nest marks the listener
+   * dependency tree as request-scoped and skips OnApplicationBootstrap.
+   * Resolve once with a durable context id and start listeners explicitly.
+   */
+  const contextId = ContextIdFactory.create();
+  app.registerRequestByContextId({}, contextId);
+  const listener = await app.resolve(ZaloListenerService, contextId);
+  await listener.startAll();
+
   logger.log('Zalo worker bootstrapped (single-instance listener)');
 
   const shutdown = async (signal: string) => {
