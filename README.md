@@ -1,4 +1,4 @@
-# OmniChat Backend (`c2d-omnichat-be`)
+# OmniChat Backend (`ncg-omnichat-be`)
 
 NestJS API + Socket.IO for OmniChat. Architecture: [docs/OMNICHAT_ARCHITECTURE.md](./docs/OMNICHAT_ARCHITECTURE.md)
 

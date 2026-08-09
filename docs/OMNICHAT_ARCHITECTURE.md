@@ -181,7 +181,7 @@ yarn install && yarn start:dev
 # → http://localhost:8090/api/v1/public/health
 
 # Flutter
-cd ../c2d-omnichat-fe && flutter pub get && flutter run
+cd ../ncg-omnichat-fe && flutter pub get && flutter run
 ```
 
 Dev OTP: always `123456` (logged to server console). Replace `OtpService` with SMS provider later.
