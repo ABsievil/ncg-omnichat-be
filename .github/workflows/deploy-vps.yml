@@ -1,0 +1,95 @@
+name: Deploy VPS
+
+on:
+    push:
+        branches:
+            - build
+    workflow_dispatch:
+
+concurrency:
+    group: deploy-vps-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build-and-deploy:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+        steps:
+            - name: Checkout source
+              uses: actions/checkout@v4
+
+            - name: Prepare image metadata
+              id: meta
+              shell: bash
+              run: |
+                  echo "image_name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+                  echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+            - name: Login to GHCR
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Build and push image
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  file: ./Dockerfile
+                  push: true
+                  tags: |
+                      ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
+                      ${{ steps.meta.outputs.image_name }}:latest
+
+            - name: Deploy via SSH
+              uses: appleboy/ssh-action@v1.2.1
+              with:
+                  host: ${{ secrets.VPS_HOST }}
+                  username: ${{ secrets.VPS_USER }}
+                  key: ${{ secrets.VPS_SSH_KEY }}
+                  port: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT || 22 }}
+                  timeout: 60m
+                  command_timeout: 50m
+                  script: |
+                      set -euo pipefail
+
+                      APP_DIR="${{ secrets.VPS_DEPLOY_PATH || vars.VPS_DEPLOY_PATH }}"
+                      REPO_URL="${{ secrets.VPS_REPO_URL }}"
+                      BRANCH="${{ secrets.VPS_DEPLOY_BRANCH || vars.VPS_DEPLOY_BRANCH || github.ref_name }}"
+
+                      if [ -z "$APP_DIR" ]; then
+                        echo "Missing VPS_DEPLOY_PATH secret or variable"
+                        exit 1
+                      fi
+                      if [ -z "$REPO_URL" ]; then
+                        echo "Missing VPS_REPO_URL secret"
+                        exit 1
+                      fi
+
+                      if [ ! -d "$APP_DIR/.git" ]; then
+                        mkdir -p "$APP_DIR"
+                        git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+                      fi
+
+                      cd "$APP_DIR"
+                      git fetch origin "$BRANCH"
+                      git checkout "$BRANCH"
+                      git reset --hard "origin/$BRANCH"
+
+                      if [ ! -f ./deploy.sh ]; then
+                        echo "deploy.sh not found in $APP_DIR on branch $BRANCH"
+                        echo "Commit and push deploy.sh, then re-run the workflow."
+                        exit 1
+                      fi
+
+                      IMAGE_NAME="${{ steps.meta.outputs.image_name }}" \
+                      IMAGE_TAG="${{ steps.meta.outputs.image_tag }}" \
+                      REGISTRY_HOST="ghcr.io" \
+                      REGISTRY_USERNAME="${{ secrets.GHCR_USERNAME }}" \
+                      REGISTRY_TOKEN="${{ secrets.GHCR_TOKEN }}" \
+                      APP_DIR="$APP_DIR" \
+                      BRANCH="$BRANCH" \
+                      bash deploy.sh
