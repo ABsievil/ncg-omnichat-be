@@ -119,14 +119,19 @@ export class HelperEncryptionService implements IHelperEncryptionService {
         payload: Record<string, any>,
         options: IHelperJwtOptions
     ): string {
-        return this.jwtService.sign(payload as any, {
+        const signOptions: Record<string, unknown> = {
             secret: options.secretKey,
             expiresIn: options.expiredIn,
             notBefore: options.notBefore ?? 0,
             audience: options.audience,
             issuer: options.issuer,
-            subject: options.subject,
-        } as any);
+        };
+
+        if (options.subject && payload.sub === undefined) {
+            signOptions.subject = options.subject;
+        }
+
+        return this.jwtService.sign(payload as any, signOptions as any);
     }
 
     jwtDecrypt<T>(token: string): T {
@@ -139,7 +144,7 @@ export class HelperEncryptionService implements IHelperEncryptionService {
                 secret: options.secretKey,
                 audience: options.audience,
                 issuer: options.issuer,
-                subject: options.subject,
+                ...(options.subject ? { subject: options.subject } : {}),
                 ignoreExpiration: options.ignoreExpiration ?? false,
             });
 

@@ -3,7 +3,7 @@ import { ENUM_HELPER_DATE_DAY_OF } from 'src/common/helper/enums/helper.enum';
 export interface IHelperJwtVerifyOptions {
     audience: string;
     issuer: string;
-    subject: string;
+    subject?: string;
     secretKey: string;
     ignoreExpiration?: boolean;
 }

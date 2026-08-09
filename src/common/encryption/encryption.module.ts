@@ -21,10 +21,10 @@ export class EncryptionModule {
                     provide: APP_INTERCEPTOR,
                     useClass: ResponseEncryptInterceptor,
                 },
-                {
-                    provide: APP_INTERCEPTOR,
-                    useClass: ChecksumInterceptor,
-                },
+                // {
+                //     provide: APP_INTERCEPTOR,
+                //     useClass: ChecksumInterceptor,
+                // },
             ],
             exports: [],
             controllers: [],

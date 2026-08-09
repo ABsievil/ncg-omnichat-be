@@ -27,7 +27,7 @@ import {
   IZaloSessionCredentials,
 } from 'src/modules/zalo/interfaces/zalo.interface';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
-import { ZaloSessionResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.response.dto';
+import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.dto';
 
 @Injectable()
 export class ZaloService implements OnModuleDestroy {
@@ -56,7 +56,7 @@ export class ZaloService implements OnModuleDestroy {
 
   async upsertSession(
     dto: ZaloSessionUpsertRequestDto,
-  ): Promise<ZaloSessionResponseDto> {
+  ): Promise<ZaloSessionGetResponseDto> {
     const accountLabel = dto.accountLabel?.trim() || ZALO_DEFAULT_ACCOUNT_LABEL;
     const { cookieEncrypted, cookieIv } = this.encryptSecret(dto.cookie);
     const proxy =
@@ -84,16 +84,16 @@ export class ZaloService implements OnModuleDestroy {
       )
       .exec();
 
-    return this.mapSession(session);
+    return this.mapGet(session);
   }
 
   async getSession(
     accountLabel = ZALO_DEFAULT_ACCOUNT_LABEL,
-  ): Promise<ZaloSessionResponseDto | null> {
+  ): Promise<ZaloSessionGetResponseDto | null> {
     const session = await this.sessionModel
       .findOne({ accountLabel, deleted: false })
       .exec();
-    return session ? this.mapSession(session) : null;
+    return session ? this.mapGet(session) : null;
   }
 
   async markSessionStatus(
@@ -329,7 +329,7 @@ export class ZaloService implements OnModuleDestroy {
     }
   }
 
-  mapSession(session: ZaloSessionDoc | ZaloSessionEntity): ZaloSessionResponseDto {
+  mapGet(session: ZaloSessionDoc | ZaloSessionEntity): ZaloSessionGetResponseDto {
     const doc = session as ZaloSessionDoc;
     return {
       _id: String(doc._id),
@@ -345,6 +345,20 @@ export class ZaloService implements OnModuleDestroy {
       ownId: doc.ownId ?? null,
       proxy: doc.proxy ?? null,
       lastLoginAt: doc.lastLoginAt ?? null,
+    };
+  }
+
+  mapGetData(
+    session: ZaloSessionGetResponseDto | null,
+  ): {
+    session: ZaloSessionGetResponseDto | null;
+    createdBy: [];
+    updatedBy: [];
+  } {
+    return {
+      session,
+      createdBy: [],
+      updatedBy: [],
     };
   }
 

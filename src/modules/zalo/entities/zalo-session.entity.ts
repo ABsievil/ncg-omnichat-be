@@ -53,4 +53,3 @@ export class ZaloSessionEntity extends DatabaseEntityBase {
 export const ZaloSessionSchema = DatabaseSchema(ZaloSessionEntity);
 export type ZaloSessionDoc = IDatabaseDocument<ZaloSessionEntity>;
 
-ZaloSessionSchema.index({ status: 1 });

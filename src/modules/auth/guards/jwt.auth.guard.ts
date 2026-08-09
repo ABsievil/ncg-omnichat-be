@@ -48,7 +48,6 @@ export class JwtAuthGuard implements CanActivate {
       secretKey: secret,
       audience: 'omnichat',
       issuer: 'omnichat',
-      subject: 'access',
       ignoreExpiration: false,
     });
     if (!valid) {

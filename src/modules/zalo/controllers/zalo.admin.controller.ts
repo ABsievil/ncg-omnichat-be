@@ -9,9 +9,12 @@ import {
 } from '@nestjs/common';
 import { Observable, Subscriber } from 'rxjs';
 import { Response } from 'src/common/response/decorators/response.decorator';
+import { IResponse } from 'src/common/response/interfaces/response.interface';
 import { ZaloLoginQrRequestDto } from 'src/modules/zalo/dtos/request/zalo.login-qr.request.dto';
 import { ZaloSendRequestDto } from 'src/modules/zalo/dtos/request/zalo.send.request.dto';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
+import { ZaloSendResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.send.response.data.dto';
+import { ZaloSessionGetResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.data.dto';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 import { ZALO_DEFAULT_ACCOUNT_LABEL } from 'src/modules/zalo/constants/zalo.constant';
 
@@ -19,34 +22,45 @@ import { ZALO_DEFAULT_ACCOUNT_LABEL } from 'src/modules/zalo/constants/zalo.cons
 export class ZaloAdminController {
   constructor(private readonly zaloService: ZaloService) {}
 
-  @Response('zalo.sessionGet')
+  @Response('zalo.get')
   @Get('/sessions')
   async getSession(
     @Query('accountLabel') accountLabel?: string,
-  ) {
-    const data = await this.zaloService.getSession(
+  ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
+    const session = await this.zaloService.getSession(
       accountLabel || ZALO_DEFAULT_ACCOUNT_LABEL,
     );
-    return { data };
+    return { data: this.zaloService.mapGetData(session) };
   }
 
-  @Response('zalo.sessionUpsert')
+  @Response('zalo.create')
   @Post('/sessions')
-  async upsertSession(@Body() dto: ZaloSessionUpsertRequestDto) {
-    const data = await this.zaloService.upsertSession(dto);
-    return { data };
+  async upsertSession(
+    @Body() dto: ZaloSessionUpsertRequestDto,
+  ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
+    const session = await this.zaloService.upsertSession(dto);
+    return { data: this.zaloService.mapGetData(session) };
   }
 
   @Response('zalo.send')
   @Post('/send')
-  async send(@Body() dto: ZaloSendRequestDto) {
+  async send(
+    @Body() dto: ZaloSendRequestDto,
+  ): Promise<IResponse<ZaloSendResponseDataDto>> {
     const response = await this.zaloService.sendMessage(dto);
-    return { data: { success: true, response } };
+    return {
+      data: {
+        result: { success: true, response },
+        createdBy: [],
+        updatedBy: [],
+      },
+    };
   }
 
   /**
    * SSE QR login stream.
    * Events: qr | scanned | declined | expired | login_success | error
+   * (SSE không dùng envelope IResponse)
    */
   @Sse('login-qr')
   loginQr(
@@ -109,7 +123,7 @@ export class ZaloAdminController {
             query.accountLabel || ZALO_DEFAULT_ACCOUNT_LABEL,
           );
           push('login_success', {
-            session,
+            data: this.zaloService.mapGetData(session),
             imeiPresent: !!credentials.imei,
           });
           subscriber.complete();

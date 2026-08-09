@@ -235,7 +235,6 @@ export class AuthService {
       expiredIn: accessExpired,
       audience: 'omnichat',
       issuer: 'omnichat',
-      subject: 'access',
     });
 
     const refreshToken = `${params.sessionId}.${uuidV4().replace(/-/g, '')}`;

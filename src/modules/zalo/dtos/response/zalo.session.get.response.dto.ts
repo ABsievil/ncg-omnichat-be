@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DatabaseDto } from 'src/common/database/dtos/database.dto';
 import { ENUM_ZALO_SESSION_STATUS } from 'src/modules/zalo/enums/zalo.enum';
 
-export class ZaloSessionResponseDto extends DatabaseDto {
+export class ZaloSessionGetResponseDto extends DatabaseDto {
   @ApiProperty()
   accountLabel!: string;
 
