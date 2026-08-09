@@ -33,7 +33,7 @@ export class ShopService implements OnModuleInit {
       .findOne({ code: SHOP_DEFAULT_CODE, deleted: false })
       .exec();
     if (existing) {
-      return existing as ShopDoc;
+      return existing;
     }
 
     const created = await this.shopModel.create({
@@ -44,7 +44,7 @@ export class ShopService implements OnModuleInit {
       chatbotKey: 'shared',
     });
     this.logger.log(`Created default shop id=${created._id}`);
-    return created as ShopDoc;
+    return created;
   }
 
   async getDefaultShopId(): Promise<string> {
@@ -175,6 +175,6 @@ export class ShopService implements OnModuleInit {
     if (!shop) {
       this.shopError.throwNotFound();
     }
-    return shop as ShopDoc;
+    return shop;
   }
 }
