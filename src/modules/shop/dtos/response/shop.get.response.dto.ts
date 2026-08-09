@@ -16,5 +16,5 @@ export class ShopGetResponseDto extends DatabaseDto {
   status!: ENUM_SHOP_STATUS;
 
   @ApiPropertyOptional()
-  chatbotKey?: string;
+  chatbotKey?: string | null;
 }

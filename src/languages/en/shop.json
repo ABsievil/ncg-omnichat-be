@@ -8,6 +8,6 @@
     "notFound": "Shop not found",
     "codeExists": "Shop code already exists",
     "disabled": "Shop is disabled",
-    "cannotDeleteDefault": "Cannot delete the default shop"
+    "shopIdRequired": "Shop id is required"
   }
 }

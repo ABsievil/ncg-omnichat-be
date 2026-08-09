@@ -3,12 +3,10 @@ import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ENUM_ZALO_THREAD_TYPE } from 'src/modules/zalo/enums/zalo.enum';
 
 export class ZaloSendRequestDto {
-  @ApiPropertyOptional({
-    description: 'Shop id. Omit to use the default shop.',
-  })
-  @IsOptional()
+  @ApiProperty({ description: 'Shop id that sends the message' })
   @IsString()
-  shopId?: string;
+  @IsNotEmpty()
+  shopId!: string;
 
   @ApiProperty()
   @IsString()

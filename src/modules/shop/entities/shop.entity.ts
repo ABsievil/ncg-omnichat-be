@@ -9,7 +9,7 @@ import { ENUM_SHOP_STATUS } from 'src/modules/shop/enums/shop.enum';
 
 @DatabaseEntity({ collection: 'shops' })
 export class ShopEntity extends DatabaseEntityBase {
-  /** Stable slug used by APIs / FE (e.g. default, shop-a). */
+  /** Stable slug used by APIs / FE (e.g. shop-a). */
   @DatabaseProp({
     required: true,
     unique: true,
@@ -45,16 +45,15 @@ export class ShopEntity extends DatabaseEntityBase {
   status!: ENUM_SHOP_STATUS;
 
   /**
-   * Shops share one chatbot runtime.
-   * Reserved for future per-shop overrides (prompt/KB) without splitting bot process.
+   * Optional chatbot runtime key for future per-shop overrides.
    */
   @DatabaseProp({
     required: false,
     type: String,
-    default: 'shared',
+    default: null,
     index: true,
   })
-  chatbotKey?: string;
+  chatbotKey?: string | null;
 }
 
 export const ShopSchema = DatabaseSchema(ShopEntity);

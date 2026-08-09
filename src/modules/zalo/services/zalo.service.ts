@@ -1,20 +1,14 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { ThreadType, Zalo, type API } from 'zca-js';
-import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.connection.constant';
 import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
 import { RedisService } from 'src/common/redis/services/redis.service';
 import { ShopService } from 'src/modules/shop/services/shop.service';
+import { ShopError } from 'src/modules/shop/errors/shop.error';
 import {
   ZALO_LOGIN_MAX_RETRIES,
   ZALO_LOGIN_RETRY_DELAY_MS,
+  ZALO_REDIS_CHANNEL_SESSION_DISABLED,
   ZALO_REDIS_CHANNEL_SESSION_RENEWED,
 } from 'src/modules/zalo/constants/zalo.constant';
 import {
@@ -34,47 +28,26 @@ import {
 } from 'src/modules/zalo/interfaces/zalo.interface';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
 import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.dto';
+import { ZaloSessionRepository } from 'src/modules/zalo/repositories/zalo-session.repository';
 
 @Injectable()
-export class ZaloService implements OnModuleInit, OnModuleDestroy {
+export class ZaloService implements OnModuleDestroy {
   private readonly logger = new Logger(ZaloService.name);
   /** key = shopId (1 Zalo account / shop) */
   private readonly apis = new Map<string, API>();
 
   constructor(
-    @InjectModel(ZaloSessionEntity.name, DATABASE_CONNECTION_NAME)
-    private readonly sessionModel: Model<ZaloSessionEntity>,
+    private readonly zaloSessionRepository: ZaloSessionRepository,
     private readonly configService: ConfigService,
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly zaloSessionError: ZaloSessionError,
     private readonly redisService: RedisService,
     private readonly shopService: ShopService,
+    private readonly shopError: ShopError,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    await this.backfillMissingShopId();
-  }
 
   onModuleDestroy(): void {
     this.clearAllApis();
-  }
-
-  private async backfillMissingShopId(): Promise<void> {
-    const defaultShopId = await this.shopService.getDefaultShopId();
-    const result = await this.sessionModel
-      .updateMany(
-        {
-          deleted: false,
-          $or: [{ shopId: { $exists: false } }, { shopId: null }, { shopId: '' }],
-        },
-        { $set: { shopId: defaultShopId } },
-      )
-      .exec();
-    if (result.modifiedCount > 0) {
-      this.logger.log(
-        `Backfilled shopId=${defaultShopId} for ${result.modifiedCount} Zalo session(s)`,
-      );
-    }
   }
 
   isConnected(shopId?: string): boolean {
@@ -114,11 +87,12 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
   }
 
   async resolveShopId(shopId?: string): Promise<string> {
-    if (shopId?.trim()) {
-      await this.shopService.assertActiveShop(shopId.trim());
-      return shopId.trim();
+    const resolved = shopId?.trim();
+    if (!resolved) {
+      this.shopError.throwShopIdRequired();
     }
-    return this.shopService.getDefaultShopId();
+    await this.shopService.assertActiveShop(resolved);
+    return resolved;
   }
 
   async upsertSession(
@@ -131,59 +105,55 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<string>('zalo.proxy') ||
       null;
 
-    const session = await this.sessionModel
-      .findOneAndUpdate(
-        { shopId, deleted: false },
-        {
-          $set: {
-            shopId,
-            cookieEncrypted,
-            cookieIv,
-            imei: dto.imei,
-            userAgent: dto.userAgent,
-            proxy,
-            status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
-            lastLoginAt: new Date(),
-            deleted: false,
-          },
-          $unset: { accountLabel: 1 },
+    const session = await this.zaloSessionRepository.upsert(
+      { shopId },
+      {
+        $set: {
+          shopId,
+          cookieEncrypted,
+          cookieIv,
+          imei: dto.imei,
+          userAgent: dto.userAgent,
+          proxy,
+          status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
+          lastLoginAt: new Date(),
+          deleted: false,
         },
-        { upsert: true, new: true },
-      )
-      .exec();
+        $unset: { accountLabel: 1 },
+      },
+      undefined,
+      { upsert: true },
+    );
 
     return this.mapGet(session);
   }
 
-  async getSession(shopId?: string): Promise<ZaloSessionGetResponseDto | null> {
+  async getSession(shopId: string): Promise<ZaloSessionGetResponseDto | null> {
     const resolvedShopId = await this.resolveShopId(shopId);
-    const session = await this.sessionModel
-      .findOne({ shopId: resolvedShopId, deleted: false })
-      .exec();
+    const session = await this.zaloSessionRepository.findOne({
+      shopId: resolvedShopId,
+    });
     return session ? this.mapGet(session) : null;
   }
 
   async listSessions(shopId?: string): Promise<ZaloSessionGetResponseDto[]> {
-    const filter: Record<string, unknown> = { deleted: false };
+    const filter: Record<string, unknown> = {};
     if (shopId?.trim()) {
       filter.shopId = await this.resolveShopId(shopId);
     }
-    const sessions = await this.sessionModel
-      .find(filter)
-      .sort({ updatedAt: -1 })
-      .exec();
+    const sessions = await this.zaloSessionRepository.findAll(filter, {
+      order: { updatedAt: -1 },
+    });
     return sessions.map(session => this.mapGet(session));
   }
 
   async listActiveShopIds(): Promise<string[]> {
-    const sessions = await this.sessionModel
-      .find({
-        deleted: false,
+    const sessions = await this.zaloSessionRepository.findAll(
+      {
         status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
-      })
-      .select('shopId')
-      .lean()
-      .exec();
+      },
+      { select: { shopId: 1 } },
+    );
 
     return sessions.map(session => String(session.shopId));
   }
@@ -192,16 +162,58 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     status: ENUM_ZALO_SESSION_STATUS,
     shopId: string,
   ): Promise<void> {
-    await this.sessionModel
-      .updateOne({ shopId, deleted: false }, { $set: { status } })
-      .exec();
+    await this.zaloSessionRepository.updateMany({ shopId }, { status });
+  }
+
+  /**
+   * Disable Zalo session so the worker stops auto-replying.
+   * Credentials are kept; reconnect via QR to re-enable.
+   */
+  async disconnectSession(
+    shopId: string,
+  ): Promise<ZaloSessionGetResponseDto> {
+    const resolvedShopId = await this.resolveShopId(shopId);
+    const session = await this.zaloSessionRepository.findOne({
+      shopId: resolvedShopId,
+    });
+
+    if (!session) {
+      this.zaloSessionError.throwSessionNotFound();
+    }
+
+    if (session.status !== ENUM_ZALO_SESSION_STATUS.DISABLED) {
+      await this.zaloSessionRepository.updateMany(
+        { shopId: resolvedShopId },
+        { status: ENUM_ZALO_SESSION_STATUS.DISABLED },
+      );
+    }
+
+    this.clearApi(resolvedShopId);
+    await this.notifySessionDisabled(resolvedShopId);
+
+    const updated = await this.getSession(resolvedShopId);
+    return updated!;
+  }
+
+  async notifySessionDisabled(shopId: string): Promise<void> {
+    try {
+      await this.redisService.publish(ZALO_REDIS_CHANNEL_SESSION_DISABLED, {
+        shopId,
+        at: new Date().toISOString(),
+      });
+      this.logger.log(`Published session disabled shopId=${shopId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish session disabled: ${String(error)}`,
+      );
+    }
   }
 
   async loadCredentials(shopId: string): Promise<IZaloSessionCredentials> {
-    const session = await this.sessionModel
-      .findOne({ shopId, deleted: false })
-      .select('+cookieEncrypted +cookieIv +imei +userAgent')
-      .exec();
+    const session = await this.zaloSessionRepository.findOne(
+      { shopId },
+      { select: '+cookieEncrypted +cookieIv +imei +userAgent' },
+    );
 
     ZaloSessionError.assertActive(session);
 
@@ -229,18 +241,14 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     try {
       const ownId =
         typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
-      await this.sessionModel
-        .updateOne(
-          { shopId, deleted: false },
-          {
-            $set: {
-              status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
-              lastLoginAt: new Date(),
-              ...(ownId ? { ownId } : {}),
-            },
-          },
-        )
-        .exec();
+      await this.zaloSessionRepository.updateMany(
+        { shopId },
+        {
+          status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
+          lastLoginAt: new Date(),
+          ...(ownId ? { ownId } : {}),
+        },
+      );
     } catch (error) {
       this.logger.warn(`Failed to refresh session metadata: ${String(error)}`);
     }
@@ -250,37 +258,36 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
 
   async loginQr(
     onEvent: (event: IZaloQrEvent) => void,
-    options?: { shopId?: string; proxy?: string },
+    options: { shopId: string; proxy?: string },
   ): Promise<{
     api: API;
     credentials: IZaloSessionCredentials;
     shopId: string;
   }> {
-    const shopId = await this.resolveShopId(options?.shopId);
+    const shopId = await this.resolveShopId(options.shopId);
     const proxy =
-      options?.proxy?.trim() ||
+      options.proxy?.trim() ||
       this.configService.get<string>('zalo.proxy') ||
       undefined;
 
-    await this.sessionModel
-      .findOneAndUpdate(
-        { shopId, deleted: false },
-        {
-          $set: {
-            shopId,
-            status: ENUM_ZALO_SESSION_STATUS.PENDING_QR,
-            deleted: false,
-          },
-          $setOnInsert: {
-            cookieEncrypted: '[]',
-            imei: '',
-            userAgent: '',
-          },
-          $unset: { accountLabel: 1 },
+    await this.zaloSessionRepository.upsert(
+      { shopId },
+      {
+        $set: {
+          shopId,
+          status: ENUM_ZALO_SESSION_STATUS.PENDING_QR,
+          deleted: false,
         },
-        { upsert: true },
-      )
-      .exec();
+        $setOnInsert: {
+          cookieEncrypted: '[]',
+          imei: '',
+          userAgent: '',
+        },
+        $unset: { accountLabel: 1 },
+      },
+      undefined,
+      { upsert: true },
+    );
 
     const zalo = new Zalo({
       selfListen: true,
@@ -352,13 +359,12 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     const ownId =
       typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
     if (ownId) {
-      await this.sessionModel
-        .updateOne({ shopId, deleted: false }, { $set: { ownId } })
-        .exec();
+      await this.zaloSessionRepository.updateMany({ shopId }, { ownId });
     } else {
-      await this.sessionModel
-        .updateOne({ shopId, deleted: false }, { $unset: { ownId: 1 } })
-        .exec();
+      await this.zaloSessionRepository.updateManyRaw(
+        { shopId },
+        { $unset: { ownId: 1 } },
+      );
     }
 
     await this.notifySessionRenewed(shopId);

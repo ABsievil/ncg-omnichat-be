@@ -29,10 +29,10 @@ export class ShopError {
     });
   }
 
-  throwCannotDeleteDefault(): never {
+  throwShopIdRequired(): never {
     throw new BadRequestException({
-      statusCode: ENUM_SHOP_STATUS_CODE.CANNOT_DELETE_DEFAULT,
-      message: 'shop.error.cannotDeleteDefault',
+      statusCode: ENUM_SHOP_STATUS_CODE.SHOP_ID_REQUIRED,
+      message: 'shop.error.shopIdRequired',
     });
   }
 

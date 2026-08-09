@@ -58,4 +58,11 @@ export class ZaloSessionError {
       message: 'zalo.error.notConnected',
     });
   }
+
+  throwSessionNotFound(): never {
+    throw new BadRequestException({
+      statusCode: ENUM_ZALO_STATUS_CODE.SESSION_NOT_FOUND,
+      message: 'zalo.error.sessionNotFound',
+    });
+  }
 }

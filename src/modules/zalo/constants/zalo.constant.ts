@@ -8,3 +8,6 @@ export const ZALO_BLOCKED_MESSAGE =
 
 /** Redis pub/sub: API → worker sau khi QR/session renew. */
 export const ZALO_REDIS_CHANNEL_SESSION_RENEWED = 'zalo:session:renewed';
+
+/** Redis pub/sub: API → worker khi ngắt kết nối / tắt auto-reply. */
+export const ZALO_REDIS_CHANNEL_SESSION_DISABLED = 'zalo:session:disabled';

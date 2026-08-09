@@ -2,6 +2,7 @@
   "get": "Get Zalo session success",
   "list": "List Zalo sessions success",
   "create": "Upsert Zalo session success",
+  "disconnect": "Disconnect Zalo session success",
   "send": "Send Zalo message success",
   "error": {
     "sessionNotFound": "Zalo session not found. Upsert session or login via QR.",

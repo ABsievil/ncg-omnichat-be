@@ -17,7 +17,6 @@ import { AuthTokenResponseDto } from 'src/modules/auth/dtos/response/auth.token.
 import { IAuthTokenPayload } from 'src/modules/auth/interfaces/auth.user.interface';
 import { AuthSessionService } from 'src/modules/auth/services/auth.session.service';
 import { OtpService } from 'src/modules/auth/services/otp.service';
-import { ShopService } from 'src/modules/shop/services/shop.service';
 import {
   ENUM_USER_GENDER,
   ENUM_USER_ROLE,
@@ -33,7 +32,6 @@ export class AuthService {
     private readonly authSessionService: AuthSessionService,
     private readonly userRepository: UserRepository,
     private readonly userService: UserService,
-    private readonly shopService: ShopService,
     private readonly helperHashService: HelperHashService,
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly configService: ConfigService,
@@ -79,14 +77,13 @@ export class AuthService {
       throw new BadRequestException('auth.error.phoneExists');
     }
 
-    const shopId = await this.shopService.getDefaultShopId();
     const salt = this.helperHashService.randomSalt(10);
     const passwordHash = this.helperHashService.bcrypt(dto.password, salt);
     const user = await this.userRepository.create({
       phone,
       passwordHash,
       displayName: dto.displayName,
-      shopId,
+      shopId: null,
       role: ENUM_USER_ROLE.USER,
       gender: ENUM_USER_GENDER.UNKNOWN,
       bio: '',
@@ -109,11 +106,10 @@ export class AuthService {
 
     let user = await this.userRepository.findOne({ phone });
     if (!user) {
-      const shopId = await this.shopService.getDefaultShopId();
       user = await this.userRepository.create({
         phone,
         displayName: phone,
-        shopId,
+        shopId: null,
         role: ENUM_USER_ROLE.USER,
         gender: ENUM_USER_GENDER.UNKNOWN,
         bio: '',
@@ -121,7 +117,7 @@ export class AuthService {
         deleted: false,
       } as any);
     } else {
-      user = await this.ensureUserShopAndRole(user);
+      user = await this.ensureUserRole(user);
     }
 
     return this.issueTokens(user, userAgent);
@@ -155,7 +151,7 @@ export class AuthService {
       throw new UnauthorizedException('auth.error.invalidCredentials');
     }
 
-    const ready = await this.ensureUserShopAndRole(user);
+    const ready = await this.ensureUserRole(user);
     return this.issueTokens(ready, userAgent);
   }
 
@@ -170,7 +166,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('auth.error.userNotFound');
     }
-    user = await this.ensureUserShopAndRole(user);
+    user = await this.ensureUserRole(user);
 
     const tokens = this.buildTokenPair({
       userId: user._id,
@@ -221,19 +217,12 @@ export class AuthService {
     return { _id: sessionId };
   }
 
-  private async ensureUserShopAndRole(user: UserDoc): Promise<UserDoc> {
-    let dirty = false;
-    if (!user.shopId) {
-      user.shopId = await this.shopService.getDefaultShopId();
-      dirty = true;
+  private async ensureUserRole(user: UserDoc): Promise<UserDoc> {
+    if (user.role) {
+      return user;
     }
-    if (!user.role) {
-      user.role = ENUM_USER_ROLE.USER;
-      dirty = true;
-    }
-    if (dirty) {
-      await this.userRepository.save(user);
-    }
+    user.role = ENUM_USER_ROLE.USER;
+    await this.userRepository.save(user);
     return user;
   }
 

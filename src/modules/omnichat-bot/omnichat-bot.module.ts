@@ -7,6 +7,7 @@ import {
   ZaloChatHistoryEntity,
   ZaloChatHistorySchema,
 } from 'src/modules/omnichat-bot/entities/zalo-chat-history.entity';
+import { ZaloChatHistoryRepository } from 'src/modules/omnichat-bot/repositories/zalo-chat-history.repository';
 import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-bot.service';
 
 @Module({
@@ -18,7 +19,7 @@ import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-b
     ZaloModule,
     AiAgentModule,
   ],
-  providers: [OmnichatBotService],
-  exports: [OmnichatBotService, MongooseModule],
+  providers: [ZaloChatHistoryRepository, OmnichatBotService],
+  exports: [OmnichatBotService, ZaloChatHistoryRepository, MongooseModule],
 })
 export class OmnichatBotModule {}
