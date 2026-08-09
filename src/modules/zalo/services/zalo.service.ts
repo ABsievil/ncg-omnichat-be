@@ -261,8 +261,12 @@ export class ZaloService implements OnModuleDestroy {
     try {
       const ownId =
         typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
+      // Never resurrect a DISABLED session if disconnect raced with login.
       await this.zaloSessionRepository.updateMany(
-        { shopId },
+        {
+          shopId,
+          status: { $ne: ENUM_ZALO_SESSION_STATUS.DISABLED },
+        },
         {
           status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
           lastLoginAt: new Date(),
@@ -388,8 +392,24 @@ export class ZaloService implements OnModuleDestroy {
     }
 
     await this.notifySessionRenewed(shopId);
-    this.apis.set(shopId, api);
+
+    // API must not keep a live Zalo socket — worker owns the single listener.
+    // Holding both kicks the other (zca-js / Zalo allow one connection per account).
+    this.releaseLiveConnection(api, shopId);
+
     return { api, credentials, shopId };
+  }
+
+  /** Stop websocket and drop in-memory API for a shop. */
+  private releaseLiveConnection(api: API, shopId: string): void {
+    try {
+      api.listener?.stop?.();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to stop Zalo socket after QR [shop=${shopId}]: ${String(error)}`,
+      );
+    }
+    this.apis.delete(shopId);
   }
 
   async notifySessionRenewed(shopId: string): Promise<void> {
