@@ -21,6 +21,8 @@ export class ZaloListenerService implements OnModuleDestroy {
   private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly handlers = new Map<string, IZaloListenerHandlers>();
   private readonly starting = new Set<string>();
+  /** Shops stopped on purpose (disconnect / destroy) — do not auto-reconnect. */
+  private readonly intentionalStops = new Set<string>();
   private eventSubscriber?: Redis;
   private readonly renewChannel: string;
   private readonly disabledChannel: string;
@@ -67,7 +69,7 @@ export class ZaloListenerService implements OnModuleDestroy {
     }
     this.reconnectTimers.clear();
     for (const shopId of [...this.handlers.keys()]) {
-      this.teardownHandlersOnly(shopId);
+      this.stopListener(shopId);
     }
     this.zaloService.clearAllApis();
     void this.eventSubscriber?.quit();
@@ -86,15 +88,32 @@ export class ZaloListenerService implements OnModuleDestroy {
         this.logger.log(
           `Skip listener start — session not active [shop=${shopId} status=${session?.status ?? 'missing'}]`,
         );
+        this.cancelReconnect(shopId);
         return;
       }
 
-      this.teardownHandlersOnly(shopId);
-      this.zaloService.clearApi(shopId);
+      this.intentionalStops.delete(shopId);
+      this.stopListener(shopId, { keepIntentional: false });
 
       const api = await this.zaloService.loginWithSession(shopId, {
         selfListen: false,
       });
+
+      // Re-check after async login — disconnect may have raced in.
+      const stillActive = await this.zaloService.findSessionByShopId(shopId);
+      if (
+        !stillActive ||
+        stillActive.status !== ENUM_ZALO_SESSION_STATUS.ACTIVE ||
+        this.intentionalStops.has(shopId)
+      ) {
+        this.logger.log(
+          `Abort listener start after login — session no longer active [shop=${shopId}]`,
+        );
+        this.intentionalStops.add(shopId);
+        this.zaloService.clearApi(shopId);
+        this.cancelReconnect(shopId);
+        return;
+      }
 
       const messageHandler = async (message: unknown) => {
         this.logger.log(`Incoming Zalo event [shop=${shopId}]`);
@@ -108,10 +127,16 @@ export class ZaloListenerService implements OnModuleDestroy {
       };
 
       const closedHandler = () => {
+        if (this.intentionalStops.has(shopId)) {
+          this.logger.log(
+            `Zalo listener closed intentionally [shop=${shopId}], skip reconnect`,
+          );
+          return;
+        }
         this.logger.warn(
           `Zalo listener closed [shop=${shopId}], scheduling reconnect...`,
         );
-        this.scheduleReconnect(shopId, attempt);
+        void this.scheduleReconnect(shopId, attempt);
       };
 
       const errorHandler = (error: unknown) => {
@@ -139,7 +164,7 @@ export class ZaloListenerService implements OnModuleDestroy {
       this.logger.error(
         `Failed to start Zalo listener [shop=${shopId}]: ${String(error)}`,
       );
-      this.scheduleReconnect(shopId, attempt);
+      await this.scheduleReconnect(shopId, attempt);
     } finally {
       this.starting.delete(shopId);
     }
@@ -189,9 +214,9 @@ export class ZaloListenerService implements OnModuleDestroy {
     }
 
     this.logger.log(`Session renewed [shop=${shopId}], restarting listener...`);
+    this.intentionalStops.delete(shopId);
     this.cancelReconnect(shopId);
-    this.teardownHandlersOnly(shopId);
-    this.zaloService.clearApi(shopId);
+    this.stopListener(shopId, { keepIntentional: false });
     await this.startListener(shopId, 0);
   }
 
@@ -206,8 +231,7 @@ export class ZaloListenerService implements OnModuleDestroy {
       `Session disabled [shop=${shopId}], stopping listener (no auto-reply)...`,
     );
     this.cancelReconnect(shopId);
-    this.teardownHandlersOnly(shopId);
-    this.zaloService.clearApi(shopId);
+    this.stopListener(shopId);
   }
 
   private cancelReconnect(shopId: string): void {
@@ -218,7 +242,23 @@ export class ZaloListenerService implements OnModuleDestroy {
     }
   }
 
-  private scheduleReconnect(shopId: string, attempt: number): void {
+  private async scheduleReconnect(
+    shopId: string,
+    attempt: number,
+  ): Promise<void> {
+    if (this.intentionalStops.has(shopId)) {
+      return;
+    }
+
+    const session = await this.zaloService.findSessionByShopId(shopId);
+    if (!session || session.status !== ENUM_ZALO_SESSION_STATUS.ACTIVE) {
+      this.logger.log(
+        `Skip reconnect — session not active [shop=${shopId} status=${session?.status ?? 'missing'}]`,
+      );
+      this.cancelReconnect(shopId);
+      return;
+    }
+
     this.cancelReconnect(shopId);
 
     const maxAttempts =
@@ -245,9 +285,29 @@ export class ZaloListenerService implements OnModuleDestroy {
     this.reconnectTimers.set(
       shopId,
       setTimeout(() => {
+        if (this.intentionalStops.has(shopId)) {
+          return;
+        }
         void this.startListener(shopId, attempt + 1);
       }, delay),
     );
+  }
+
+  /**
+   * Mark intentional stop, detach handlers, and stop the websocket.
+   * `keepIntentional` defaults true so closed events after stop do not reconnect.
+   */
+  private stopListener(
+    shopId: string,
+    opts?: { keepIntentional?: boolean },
+  ): void {
+    const keepIntentional = opts?.keepIntentional ?? true;
+    if (keepIntentional) {
+      this.intentionalStops.add(shopId);
+    }
+
+    this.teardownHandlersOnly(shopId);
+    this.zaloService.clearApi(shopId);
   }
 
   private teardownHandlersOnly(shopId: string): void {
@@ -260,8 +320,10 @@ export class ZaloListenerService implements OnModuleDestroy {
 
     try {
       api.listener.off('message', bound.messageHandler);
-      api.listener.off('closed', bound.closedHandler);
-      api.listener.off('error', bound.errorHandler);
+      // onClosed/onError are single callback slots (not EventEmitter) — must overwrite.
+      api.listener.onClosed(() => undefined);
+      api.listener.onError(() => undefined);
+      api.listener.onConnected(() => undefined);
     } catch {
       // ignore
     }
