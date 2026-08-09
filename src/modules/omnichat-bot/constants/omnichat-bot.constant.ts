@@ -1,0 +1,1 @@
+export const OMNICHAT_BOT_HISTORY_LIMIT = 10;

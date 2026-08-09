@@ -1,0 +1,13 @@
+{
+  "sessionGet": "Get Zalo session success",
+  "sessionUpsert": "Upsert Zalo session success",
+  "send": "Send Zalo message success",
+  "error": {
+    "sessionNotFound": "Zalo session not found. Upsert session or login via QR.",
+    "sessionExpired": "Zalo session expired. Please login via QR again.",
+    "sessionDisabled": "Zalo session is disabled.",
+    "loginFailed": "Zalo login failed",
+    "sendFailed": "Failed to send Zalo message",
+    "notConnected": "Zalo API is not connected"
+  }
+}

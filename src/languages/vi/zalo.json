@@ -1,0 +1,13 @@
+{
+  "sessionGet": "Lấy phiên Zalo thành công",
+  "sessionUpsert": "Lưu phiên Zalo thành công",
+  "send": "Gửi tin Zalo thành công",
+  "error": {
+    "sessionNotFound": "Không tìm thấy phiên Zalo. Hãy upsert session hoặc đăng nhập QR.",
+    "sessionExpired": "Phiên Zalo đã hết hạn. Vui lòng đăng nhập lại bằng QR.",
+    "sessionDisabled": "Phiên Zalo đã bị vô hiệu hóa.",
+    "loginFailed": "Đăng nhập Zalo thất bại",
+    "sendFailed": "Gửi tin Zalo thất bại",
+    "notConnected": "Chưa kết nối Zalo API"
+  }
+}

@@ -9,14 +9,14 @@ export class DatabaseDto {
         example: uuidv4(),
         required: true,
     })
-    _id: string;
+    _id!: string;
 
     @ApiProperty({
         description: 'Date created at',
         example: new Date(),
         required: true,
     })
-    createdAt: Date;
+    createdAt!: Date;
 
     @ApiProperty({
         description: 'created by',
@@ -29,7 +29,7 @@ export class DatabaseDto {
         example: new Date(),
         required: true,
     })
-    updatedAt: Date;
+    updatedAt!: Date;
 
     @ApiProperty({
         description: 'updated by',
@@ -42,7 +42,7 @@ export class DatabaseDto {
         default: false,
         required: true,
     })
-    deleted: boolean;
+    deleted!: boolean;
 
     @ApiProperty({
         description: 'Date delete at',
