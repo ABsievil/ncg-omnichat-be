@@ -1,7 +1,6 @@
 import {
   Injectable,
   Logger,
-  OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,9 +16,7 @@ import { IZaloListenerHandlers } from 'src/modules/zalo/interfaces/zalo.listener
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 
 @Injectable()
-export class ZaloListenerService
-  implements OnApplicationBootstrap, OnModuleDestroy
-{
+export class ZaloListenerService implements OnModuleDestroy {
   private readonly logger = new Logger(ZaloListenerService.name);
   private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly handlers = new Map<string, IZaloListenerHandlers>();
@@ -27,6 +24,7 @@ export class ZaloListenerService
   private eventSubscriber?: Redis;
   private readonly renewChannel: string;
   private readonly disabledChannel: string;
+  private started = false;
 
   constructor(
     private readonly zaloService: ZaloService,
@@ -42,9 +40,18 @@ export class ZaloListenerService
     );
   }
 
-  async onApplicationBootstrap(): Promise<void> {
+  /** Explicit entry — ApplicationContext skips OnApplicationBootstrap for request-scoped trees. */
+  async startAll(): Promise<void> {
+    if (this.started) {
+      return;
+    }
+    this.started = true;
+
     await this.subscribeSessionEvents();
     const shopIds = await this.zaloService.listActiveShopIds();
+    this.logger.log(
+      `Bootstrap listeners for ${shopIds.length} active session(s): ${shopIds.join(', ') || '(none)'}`,
+    );
     if (shopIds.length === 0) {
       this.logger.warn(
         'No active Zalo sessions found. Waiting for QR login renew...',
@@ -90,6 +97,7 @@ export class ZaloListenerService
       });
 
       const messageHandler = async (message: unknown) => {
+        this.logger.log(`Incoming Zalo event [shop=${shopId}]`);
         try {
           await this.omnichatBotService.handleIncomingMessage(message, shopId);
         } catch (error) {
