@@ -1,9 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { v4 as uuidV4 } from 'uuid';
-import {
-  SHOP_DEFAULT_CODE,
-  SHOP_DEFAULT_NAME,
-} from 'src/modules/shop/constants/shop.constant';
 import { ShopCreateRequestDto } from 'src/modules/shop/dtos/request/shop.create.request.dto';
 import { ShopUpdateRequestDto } from 'src/modules/shop/dtos/request/shop.update.request.dto';
 import { ShopGetResponseDto } from 'src/modules/shop/dtos/response/shop.get.response.dto';
@@ -13,41 +9,11 @@ import { ShopError } from 'src/modules/shop/errors/shop.error';
 import { ShopRepository } from 'src/modules/shop/repositories/shop.repository';
 
 @Injectable()
-export class ShopService implements OnModuleInit {
-  private readonly logger = new Logger(ShopService.name);
-
+export class ShopService {
   constructor(
     private readonly shopRepository: ShopRepository,
     private readonly shopError: ShopError,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    await this.ensureDefaultShop();
-  }
-
-  async ensureDefaultShop(): Promise<ShopDoc> {
-    const existing = await this.shopRepository.findOne({
-      code: SHOP_DEFAULT_CODE,
-    });
-    if (existing) {
-      return existing;
-    }
-
-    const created = await this.shopRepository.create({
-      code: SHOP_DEFAULT_CODE,
-      name: SHOP_DEFAULT_NAME,
-      description: 'Auto-created default shop',
-      status: ENUM_SHOP_STATUS.ACTIVE,
-      chatbotKey: 'shared',
-    } as ShopEntity);
-    this.logger.log(`Created default shop id=${created._id}`);
-    return created;
-  }
-
-  async getDefaultShopId(): Promise<string> {
-    const shop = await this.ensureDefaultShop();
-    return String(shop._id);
-  }
 
   async create(dto: ShopCreateRequestDto): Promise<ShopGetResponseDto> {
     const code = await this.generateUniqueCode();
@@ -56,7 +22,6 @@ export class ShopService implements OnModuleInit {
       name: dto.name.trim(),
       description: dto.description?.trim() || null,
       status: dto.status ?? ENUM_SHOP_STATUS.ACTIVE,
-      chatbotKey: 'shared',
     } as ShopEntity);
 
     return this.mapGet(shop);
@@ -121,10 +86,7 @@ export class ShopService implements OnModuleInit {
   }
 
   async softDelete(shopId: string): Promise<void> {
-    const shop = await this.findDocById(shopId);
-    if (shop.code === SHOP_DEFAULT_CODE) {
-      this.shopError.throwCannotDeleteDefault();
-    }
+    await this.findDocById(shopId);
     await this.shopRepository.softDelete({ _id: shopId });
   }
 
@@ -143,7 +105,7 @@ export class ShopService implements OnModuleInit {
       name: doc.name,
       description: doc.description ?? null,
       status: doc.status,
-      chatbotKey: doc.chatbotKey ?? 'shared',
+      chatbotKey: doc.chatbotKey ?? null,
     };
   }
 

@@ -8,6 +8,6 @@
     "notFound": "Không tìm thấy cửa hàng",
     "codeExists": "Mã cửa hàng đã tồn tại",
     "disabled": "Cửa hàng đã bị vô hiệu hóa",
-    "cannotDeleteDefault": "Không thể xóa cửa hàng mặc định"
+    "shopIdRequired": "Thiếu shop id"
   }
 }
