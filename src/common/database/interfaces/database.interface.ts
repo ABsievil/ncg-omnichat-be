@@ -5,7 +5,8 @@ export interface IDatabaseQueryContainOptions {
     fullWord: boolean;
 }
 
-export type IDatabaseDocument<T> = T & Document;
+/** Entities use string UUID `_id` (see DatabaseEntityBase), not ObjectId. */
+export type IDatabaseDocument<T> = Omit<Document, '_id'> & T;
 
 // Find
 export interface IDatabaseOptions {
