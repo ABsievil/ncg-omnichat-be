@@ -49,6 +49,8 @@ export class UserService {
       deletedAt: user.deletedAt,
       deletedBy: user.deletedBy,
       phone: user.phone,
+      shopId: user.shopId ?? null,
+      role: user.role,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl ?? null,
       coverUrl: user.coverUrl ?? null,

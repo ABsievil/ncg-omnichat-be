@@ -14,6 +14,7 @@ import {
   IAuthUser,
 } from 'src/modules/auth/interfaces/auth.user.interface';
 import { AuthSessionService } from 'src/modules/auth/services/auth.session.service';
+import { ENUM_USER_ROLE } from 'src/modules/user/enums/user.enum';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -72,6 +73,8 @@ export class JwtAuthGuard implements CanActivate {
       userId: payload.sub,
       sessionId: payload.sid,
       phone: payload.phone,
+      shopId: payload.shopId ?? null,
+      role: payload.role ?? ENUM_USER_ROLE.USER,
     };
     request.user = { ...authUser, _id: payload.sub };
     return true;

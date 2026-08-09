@@ -2,10 +2,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class ZaloSessionUpsertRequestDto {
-  @ApiPropertyOptional({ default: 'default' })
+  @ApiPropertyOptional({
+    description: 'Shop id. Omit to use the default shop.',
+  })
   @IsOptional()
   @IsString()
-  accountLabel?: string;
+  shopId?: string;
 
   @ApiProperty({
     description: 'Cookie JSON string (array) from Zalo QR login',

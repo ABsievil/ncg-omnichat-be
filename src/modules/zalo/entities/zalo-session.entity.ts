@@ -7,6 +7,9 @@ import { DatabaseEntityBase } from 'src/common/database/entities/database.entity
 import { IDatabaseDocument } from 'src/common/database/interfaces/database.interface';
 import { ENUM_ZALO_SESSION_STATUS } from 'src/modules/zalo/enums/zalo.enum';
 
+/**
+ * One Zalo personal account per shop (shopId is the unique key).
+ */
 @DatabaseEntity({ collection: 'zalo_sessions' })
 export class ZaloSessionEntity extends DatabaseEntityBase {
   @DatabaseProp({
@@ -14,9 +17,8 @@ export class ZaloSessionEntity extends DatabaseEntityBase {
     unique: true,
     index: true,
     trim: true,
-    default: 'default',
   })
-  accountLabel!: string;
+  shopId!: string;
 
   /** AES-encrypted cookie JSON (or plaintext when encryption disabled) */
   @DatabaseProp({ required: true, select: false })
@@ -52,4 +54,3 @@ export class ZaloSessionEntity extends DatabaseEntityBase {
 
 export const ZaloSessionSchema = DatabaseSchema(ZaloSessionEntity);
 export type ZaloSessionDoc = IDatabaseDocument<ZaloSessionEntity>;
-

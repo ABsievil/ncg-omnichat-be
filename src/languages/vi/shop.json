@@ -1,0 +1,13 @@
+{
+  "list": "Lấy danh sách cửa hàng thành công",
+  "get": "Lấy cửa hàng thành công",
+  "create": "Tạo cửa hàng thành công",
+  "update": "Cập nhật cửa hàng thành công",
+  "delete": "Xóa cửa hàng thành công",
+  "error": {
+    "notFound": "Không tìm thấy cửa hàng",
+    "codeExists": "Mã cửa hàng đã tồn tại",
+    "disabled": "Cửa hàng đã bị vô hiệu hóa",
+    "cannotDeleteDefault": "Không thể xóa cửa hàng mặc định"
+  }
+}

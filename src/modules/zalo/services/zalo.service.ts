@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -10,8 +11,8 @@ import { ThreadType, Zalo, type API } from 'zca-js';
 import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.connection.constant';
 import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
 import { RedisService } from 'src/common/redis/services/redis.service';
+import { ShopService } from 'src/modules/shop/services/shop.service';
 import {
-  ZALO_DEFAULT_ACCOUNT_LABEL,
   ZALO_LOGIN_MAX_RETRIES,
   ZALO_LOGIN_RETRY_DELAY_MS,
   ZALO_REDIS_CHANNEL_SESSION_RENEWED,
@@ -20,7 +21,10 @@ import {
   ZaloSessionDoc,
   ZaloSessionEntity,
 } from 'src/modules/zalo/entities/zalo-session.entity';
-import { ENUM_ZALO_SESSION_STATUS, ENUM_ZALO_THREAD_TYPE } from 'src/modules/zalo/enums/zalo.enum';
+import {
+  ENUM_ZALO_SESSION_STATUS,
+  ENUM_ZALO_THREAD_TYPE,
+} from 'src/modules/zalo/enums/zalo.enum';
 import { ZaloSessionError } from 'src/modules/zalo/errors/zalo.session.error';
 import {
   IZaloMessage,
@@ -32,9 +36,10 @@ import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.
 import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.dto';
 
 @Injectable()
-export class ZaloService implements OnModuleDestroy {
+export class ZaloService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ZaloService.name);
-  private api: API | undefined;
+  /** key = shopId (1 Zalo account / shop) */
+  private readonly apis = new Map<string, API>();
 
   constructor(
     @InjectModel(ZaloSessionEntity.name, DATABASE_CONNECTION_NAME)
@@ -43,30 +48,83 @@ export class ZaloService implements OnModuleDestroy {
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly zaloSessionError: ZaloSessionError,
     private readonly redisService: RedisService,
+    private readonly shopService: ShopService,
   ) {}
 
+  async onModuleInit(): Promise<void> {
+    await this.backfillMissingShopId();
+  }
+
   onModuleDestroy(): void {
-    this.stopListener();
+    this.clearAllApis();
   }
 
-  isConnected(): boolean {
-    return !!this.api;
+  private async backfillMissingShopId(): Promise<void> {
+    const defaultShopId = await this.shopService.getDefaultShopId();
+    const result = await this.sessionModel
+      .updateMany(
+        {
+          deleted: false,
+          $or: [{ shopId: { $exists: false } }, { shopId: null }, { shopId: '' }],
+        },
+        { $set: { shopId: defaultShopId } },
+      )
+      .exec();
+    if (result.modifiedCount > 0) {
+      this.logger.log(
+        `Backfilled shopId=${defaultShopId} for ${result.modifiedCount} Zalo session(s)`,
+      );
+    }
   }
 
-  getApi(): API | undefined {
-    return this.api;
+  isConnected(shopId?: string): boolean {
+    if (!shopId) {
+      return this.apis.size > 0;
+    }
+    return this.apis.has(shopId);
   }
 
-  /** Stop websocket + drop in-memory API so next ensureApi/login reloads credentials. */
-  clearApi(): void {
-    this.stopListener();
-    this.api = undefined;
+  getApi(shopId: string): API | undefined {
+    return this.apis.get(shopId);
+  }
+
+  listConnectedShopIds(): string[] {
+    return [...this.apis.keys()];
+  }
+
+  clearApi(shopId: string): void {
+    const api = this.apis.get(shopId);
+    if (!api) {
+      return;
+    }
+    try {
+      api.listener.stop();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to stop Zalo listener shopId=${shopId}: ${String(error)}`,
+      );
+    }
+    this.apis.delete(shopId);
+  }
+
+  clearAllApis(): void {
+    for (const shopId of [...this.apis.keys()]) {
+      this.clearApi(shopId);
+    }
+  }
+
+  async resolveShopId(shopId?: string): Promise<string> {
+    if (shopId?.trim()) {
+      await this.shopService.assertActiveShop(shopId.trim());
+      return shopId.trim();
+    }
+    return this.shopService.getDefaultShopId();
   }
 
   async upsertSession(
     dto: ZaloSessionUpsertRequestDto,
   ): Promise<ZaloSessionGetResponseDto> {
-    const accountLabel = dto.accountLabel?.trim() || ZALO_DEFAULT_ACCOUNT_LABEL;
+    const shopId = await this.resolveShopId(dto.shopId);
     const { cookieEncrypted, cookieIv } = this.encryptSecret(dto.cookie);
     const proxy =
       dto.proxy?.trim() ||
@@ -75,10 +133,10 @@ export class ZaloService implements OnModuleDestroy {
 
     const session = await this.sessionModel
       .findOneAndUpdate(
-        { accountLabel, deleted: false },
+        { shopId, deleted: false },
         {
           $set: {
-            accountLabel,
+            shopId,
             cookieEncrypted,
             cookieIv,
             imei: dto.imei,
@@ -88,6 +146,7 @@ export class ZaloService implements OnModuleDestroy {
             lastLoginAt: new Date(),
             deleted: false,
           },
+          $unset: { accountLabel: 1 },
         },
         { upsert: true, new: true },
       )
@@ -96,29 +155,51 @@ export class ZaloService implements OnModuleDestroy {
     return this.mapGet(session);
   }
 
-  async getSession(
-    accountLabel = ZALO_DEFAULT_ACCOUNT_LABEL,
-  ): Promise<ZaloSessionGetResponseDto | null> {
+  async getSession(shopId?: string): Promise<ZaloSessionGetResponseDto | null> {
+    const resolvedShopId = await this.resolveShopId(shopId);
     const session = await this.sessionModel
-      .findOne({ accountLabel, deleted: false })
+      .findOne({ shopId: resolvedShopId, deleted: false })
       .exec();
     return session ? this.mapGet(session) : null;
   }
 
+  async listSessions(shopId?: string): Promise<ZaloSessionGetResponseDto[]> {
+    const filter: Record<string, unknown> = { deleted: false };
+    if (shopId?.trim()) {
+      filter.shopId = await this.resolveShopId(shopId);
+    }
+    const sessions = await this.sessionModel
+      .find(filter)
+      .sort({ updatedAt: -1 })
+      .exec();
+    return sessions.map(session => this.mapGet(session));
+  }
+
+  async listActiveShopIds(): Promise<string[]> {
+    const sessions = await this.sessionModel
+      .find({
+        deleted: false,
+        status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
+      })
+      .select('shopId')
+      .lean()
+      .exec();
+
+    return sessions.map(session => String(session.shopId));
+  }
+
   async markSessionStatus(
     status: ENUM_ZALO_SESSION_STATUS,
-    accountLabel = ZALO_DEFAULT_ACCOUNT_LABEL,
+    shopId: string,
   ): Promise<void> {
     await this.sessionModel
-      .updateOne({ accountLabel, deleted: false }, { $set: { status } })
+      .updateOne({ shopId, deleted: false }, { $set: { status } })
       .exec();
   }
 
-  async loadCredentials(
-    accountLabel = ZALO_DEFAULT_ACCOUNT_LABEL,
-  ): Promise<IZaloSessionCredentials> {
+  async loadCredentials(shopId: string): Promise<IZaloSessionCredentials> {
     const session = await this.sessionModel
-      .findOne({ accountLabel, deleted: false })
+      .findOne({ shopId, deleted: false })
       .select('+cookieEncrypted +cookieIv +imei +userAgent')
       .exec();
 
@@ -128,27 +209,29 @@ export class ZaloService implements OnModuleDestroy {
       cookie: this.decryptSecret(session.cookieEncrypted, session.cookieIv),
       imei: session.imei,
       userAgent: session.userAgent,
-      proxy: session.proxy ?? this.configService.get<string>('zalo.proxy') ?? undefined,
+      proxy:
+        session.proxy ??
+        this.configService.get<string>('zalo.proxy') ??
+        undefined,
     };
   }
 
   async loginWithSession(
-    accountLabel = ZALO_DEFAULT_ACCOUNT_LABEL,
+    shopId: string,
     opts?: { selfListen?: boolean },
   ): Promise<API> {
-    const credentials = await this.loadCredentials(accountLabel);
-    this.api = await this.loginWithRetry(credentials, {
+    const credentials = await this.loadCredentials(shopId);
+    const api = await this.loginWithRetry(credentials, {
       selfListen: opts?.selfListen ?? false,
     });
+    this.apis.set(shopId, api);
 
     try {
       const ownId =
-        typeof this.api.getOwnId === 'function'
-          ? String(this.api.getOwnId())
-          : null;
+        typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
       await this.sessionModel
         .updateOne(
-          { accountLabel, deleted: false },
+          { shopId, deleted: false },
           {
             $set: {
               status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
@@ -162,15 +245,18 @@ export class ZaloService implements OnModuleDestroy {
       this.logger.warn(`Failed to refresh session metadata: ${String(error)}`);
     }
 
-    return this.api;
+    return api;
   }
 
   async loginQr(
     onEvent: (event: IZaloQrEvent) => void,
-    options?: { accountLabel?: string; proxy?: string },
-  ): Promise<{ api: API; credentials: IZaloSessionCredentials }> {
-    const accountLabel =
-      options?.accountLabel?.trim() || ZALO_DEFAULT_ACCOUNT_LABEL;
+    options?: { shopId?: string; proxy?: string },
+  ): Promise<{
+    api: API;
+    credentials: IZaloSessionCredentials;
+    shopId: string;
+  }> {
+    const shopId = await this.resolveShopId(options?.shopId);
     const proxy =
       options?.proxy?.trim() ||
       this.configService.get<string>('zalo.proxy') ||
@@ -178,10 +264,10 @@ export class ZaloService implements OnModuleDestroy {
 
     await this.sessionModel
       .findOneAndUpdate(
-        { accountLabel, deleted: false },
+        { shopId, deleted: false },
         {
           $set: {
-            accountLabel,
+            shopId,
             status: ENUM_ZALO_SESSION_STATUS.PENDING_QR,
             deleted: false,
           },
@@ -190,6 +276,7 @@ export class ZaloService implements OnModuleDestroy {
             imei: '',
             userAgent: '',
           },
+          $unset: { accountLabel: 1 },
         },
         { upsert: true },
       )
@@ -220,7 +307,7 @@ export class ZaloService implements OnModuleDestroy {
         };
         earlyCredentials = nextCredentials;
         void this.upsertSession({
-          accountLabel,
+          shopId,
           cookie: nextCredentials.cookie,
           imei: nextCredentials.imei,
           userAgent: nextCredentials.userAgent,
@@ -255,7 +342,7 @@ export class ZaloService implements OnModuleDestroy {
     };
 
     await this.upsertSession({
-      accountLabel,
+      shopId,
       cookie: credentials.cookie,
       imei: credentials.imei,
       userAgent: credentials.userAgent,
@@ -266,46 +353,34 @@ export class ZaloService implements OnModuleDestroy {
       typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
     if (ownId) {
       await this.sessionModel
-        .updateOne(
-          { accountLabel, deleted: false },
-          { $set: { ownId } },
-        )
+        .updateOne({ shopId, deleted: false }, { $set: { ownId } })
         .exec();
     } else {
-      // Tránh giữ ownId của acc cũ khi đổi Zalo cùng accountLabel.
       await this.sessionModel
-        .updateOne(
-          { accountLabel, deleted: false },
-          { $unset: { ownId: 1 } },
-        )
+        .updateOne({ shopId, deleted: false }, { $unset: { ownId: 1 } })
         .exec();
     }
 
-    // API process chỉ lưu cookie; worker giữ listener → báo worker reload.
-    await this.notifySessionRenewed(accountLabel);
-
-    this.api = api;
-    return { api, credentials };
+    await this.notifySessionRenewed(shopId);
+    this.apis.set(shopId, api);
+    return { api, credentials, shopId };
   }
 
-  async notifySessionRenewed(accountLabel: string): Promise<void> {
+  async notifySessionRenewed(shopId: string): Promise<void> {
     try {
       await this.redisService.publish(ZALO_REDIS_CHANNEL_SESSION_RENEWED, {
-        accountLabel,
+        shopId,
         at: new Date().toISOString(),
       });
-      this.logger.log(
-        `Published session renew for accountLabel=${accountLabel}`,
-      );
+      this.logger.log(`Published session renew shopId=${shopId}`);
     } catch (error) {
-      this.logger.error(
-        `Failed to publish session renew: ${String(error)}`,
-      );
+      this.logger.error(`Failed to publish session renew: ${String(error)}`);
     }
   }
 
   async sendMessage(input: IZaloSendMessageInput): Promise<unknown> {
-    const api = await this.ensureApi();
+    const shopId = await this.resolveShopId(input.shopId);
+    const api = await this.ensureApi(shopId);
     const type =
       input.type === ENUM_ZALO_THREAD_TYPE.GROUP
         ? ThreadType.Group
@@ -323,18 +398,6 @@ export class ZaloService implements OnModuleDestroy {
       const reason = error instanceof Error ? error.message : String(error);
       this.zaloSessionError.throwSendFailed(reason);
     }
-  }
-
-  async sendTyping(
-    threadId: string,
-    type: ENUM_ZALO_THREAD_TYPE = ENUM_ZALO_THREAD_TYPE.USER,
-  ): Promise<void> {
-    const api = await this.ensureApi();
-    const threadType =
-      type === ENUM_ZALO_THREAD_TYPE.GROUP
-        ? ThreadType.Group
-        : ThreadType.User;
-    await api.sendTypingEvent(threadId, threadType);
   }
 
   normalizeIncomingMessage(message: unknown): IZaloMessage | null {
@@ -365,17 +428,6 @@ export class ZaloService implements OnModuleDestroy {
     };
   }
 
-  stopListener(): void {
-    if (!this.api) {
-      return;
-    }
-    try {
-      this.api.listener.stop();
-    } catch (error) {
-      this.logger.warn(`Failed to stop Zalo listener: ${String(error)}`);
-    }
-  }
-
   mapGet(session: ZaloSessionDoc | ZaloSessionEntity): ZaloSessionGetResponseDto {
     const doc = session as ZaloSessionDoc;
     return {
@@ -387,7 +439,7 @@ export class ZaloService implements OnModuleDestroy {
       deleted: !!doc.deleted,
       deletedAt: doc.deletedAt,
       deletedBy: doc.deletedBy,
-      accountLabel: doc.accountLabel,
+      shopId: doc.shopId,
       status: doc.status,
       ownId: doc.ownId ?? null,
       proxy: doc.proxy ?? null,
@@ -395,25 +447,28 @@ export class ZaloService implements OnModuleDestroy {
     };
   }
 
-  mapGetData(
-    session: ZaloSessionGetResponseDto | null,
-  ): {
-    session: ZaloSessionGetResponseDto | null;
-    createdBy: [];
-    updatedBy: [];
-  } {
+  mapGetData(session: ZaloSessionGetResponseDto | null) {
     return {
       session,
-      createdBy: [],
-      updatedBy: [],
+      createdBy: [] as [],
+      updatedBy: [] as [],
     };
   }
 
-  private async ensureApi(): Promise<API> {
-    if (this.api) {
-      return this.api;
+  mapListData(sessions: ZaloSessionGetResponseDto[]) {
+    return {
+      sessions,
+      createdBy: [] as [],
+      updatedBy: [] as [],
+    };
+  }
+
+  private async ensureApi(shopId: string): Promise<API> {
+    const existing = this.apis.get(shopId);
+    if (existing) {
+      return existing;
     }
-    return this.loginWithSession();
+    return this.loginWithSession(shopId);
   }
 
   private async loginWithRetry(
