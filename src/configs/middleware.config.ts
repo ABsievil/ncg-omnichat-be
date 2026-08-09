@@ -42,6 +42,8 @@ export default registerAs('middleware', () => ({
       [
         'Content-Type',
         'Authorization',
+        'Accept',
+        'Cache-Control',
         'Accept-Language',
         'x-lang',
         OMNICHAT_REQUEST_HEADER.ClientId,
