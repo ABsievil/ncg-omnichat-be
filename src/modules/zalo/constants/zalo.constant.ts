@@ -7,3 +7,6 @@ export const ZALO_LOGIN_RETRY_DELAY_MS = 3000;
 
 export const ZALO_BLOCKED_MESSAGE =
   'Xin lỗi, tin nhắn của bạn đã bị chặn.';
+
+/** Redis pub/sub: API → worker sau khi QR/session renew. */
+export const ZALO_REDIS_CHANNEL_SESSION_RENEWED = 'zalo:session:renewed';

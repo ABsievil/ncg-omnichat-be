@@ -5,8 +5,13 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type Redis from 'ioredis';
+import { RedisService } from 'src/common/redis/services/redis.service';
 import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-bot.service';
-import { ZALO_DEFAULT_ACCOUNT_LABEL } from 'src/modules/zalo/constants/zalo.constant';
+import {
+  ZALO_DEFAULT_ACCOUNT_LABEL,
+  ZALO_REDIS_CHANNEL_SESSION_RENEWED,
+} from 'src/modules/zalo/constants/zalo.constant';
 import { ENUM_ZALO_SESSION_STATUS } from 'src/modules/zalo/enums/zalo.enum';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 
@@ -20,19 +25,29 @@ export class ZaloListenerService
   private closedHandler?: () => void;
   private errorHandler?: (error: unknown) => void;
   private starting = false;
+  private renewSubscriber?: Redis;
+  private readonly renewChannel: string;
 
   constructor(
     private readonly zaloService: ZaloService,
     private readonly omnichatBotService: OmnichatBotService,
     private readonly configService: ConfigService,
-  ) {}
+    private readonly redisService: RedisService,
+  ) {
+    this.renewChannel = this.redisService.channelKey(
+      ZALO_REDIS_CHANNEL_SESSION_RENEWED,
+    );
+  }
 
   async onApplicationBootstrap(): Promise<void> {
+    await this.subscribeSessionRenewals();
     await this.startListener();
   }
 
   onModuleDestroy(): void {
     this.teardown();
+    void this.renewSubscriber?.quit();
+    this.renewSubscriber = undefined;
   }
 
   async startListener(attempt = 0): Promise<void> {
@@ -43,6 +58,7 @@ export class ZaloListenerService
 
     try {
       this.teardownHandlersOnly();
+      this.zaloService.clearApi();
 
       const api = await this.zaloService.loginWithSession(
         ZALO_DEFAULT_ACCOUNT_LABEL,
@@ -85,6 +101,60 @@ export class ZaloListenerService
     }
   }
 
+  private async subscribeSessionRenewals(): Promise<void> {
+    try {
+      this.renewSubscriber = this.redisService.duplicateClient();
+      await this.renewSubscriber.subscribe(this.renewChannel);
+      this.renewSubscriber.on('message', (channel, raw) => {
+        if (channel !== this.renewChannel) {
+          return;
+        }
+        void this.handleSessionRenewed(raw);
+      });
+      this.logger.log(
+        `Subscribed session renew channel: ${this.renewChannel}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to subscribe session renew channel: ${String(error)}`,
+      );
+    }
+  }
+
+  private async handleSessionRenewed(raw: string): Promise<void> {
+    let accountLabel = ZALO_DEFAULT_ACCOUNT_LABEL;
+    try {
+      const payload = JSON.parse(raw) as { accountLabel?: string };
+      if (payload.accountLabel?.trim()) {
+        accountLabel = payload.accountLabel.trim();
+      }
+    } catch {
+      this.logger.warn(`Invalid session renew payload: ${raw}`);
+      return;
+    }
+
+    // Worker hiện chỉ listen 1 acc (default).
+    if (accountLabel !== ZALO_DEFAULT_ACCOUNT_LABEL) {
+      this.logger.warn(
+        `Ignore session renew for accountLabel=${accountLabel} (worker listens ${ZALO_DEFAULT_ACCOUNT_LABEL})`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Session renewed for ${accountLabel}, restarting Zalo listener...`,
+    );
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+
+    this.teardownHandlersOnly();
+    this.zaloService.clearApi();
+    await this.startListener(0);
+  }
+
   private scheduleReconnect(attempt: number): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -119,7 +189,7 @@ export class ZaloListenerService
       this.reconnectTimer = undefined;
     }
     this.teardownHandlersOnly();
-    this.zaloService.stopListener();
+    this.zaloService.clearApi();
   }
 
   private teardownHandlersOnly(): void {

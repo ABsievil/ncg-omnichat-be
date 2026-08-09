@@ -9,10 +9,12 @@ import { Model } from 'mongoose';
 import { ThreadType, Zalo, type API } from 'zca-js';
 import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.connection.constant';
 import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
+import { RedisService } from 'src/common/redis/services/redis.service';
 import {
   ZALO_DEFAULT_ACCOUNT_LABEL,
   ZALO_LOGIN_MAX_RETRIES,
   ZALO_LOGIN_RETRY_DELAY_MS,
+  ZALO_REDIS_CHANNEL_SESSION_RENEWED,
 } from 'src/modules/zalo/constants/zalo.constant';
 import {
   ZaloSessionDoc,
@@ -40,6 +42,7 @@ export class ZaloService implements OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly zaloSessionError: ZaloSessionError,
+    private readonly redisService: RedisService,
   ) {}
 
   onModuleDestroy(): void {
@@ -52,6 +55,12 @@ export class ZaloService implements OnModuleDestroy {
 
   getApi(): API | undefined {
     return this.api;
+  }
+
+  /** Stop websocket + drop in-memory API so next ensureApi/login reloads credentials. */
+  clearApi(): void {
+    this.stopListener();
+    this.api = undefined;
   }
 
   async upsertSession(
@@ -253,8 +262,46 @@ export class ZaloService implements OnModuleDestroy {
       proxy,
     });
 
+    const ownId =
+      typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
+    if (ownId) {
+      await this.sessionModel
+        .updateOne(
+          { accountLabel, deleted: false },
+          { $set: { ownId } },
+        )
+        .exec();
+    } else {
+      // Tránh giữ ownId của acc cũ khi đổi Zalo cùng accountLabel.
+      await this.sessionModel
+        .updateOne(
+          { accountLabel, deleted: false },
+          { $unset: { ownId: 1 } },
+        )
+        .exec();
+    }
+
+    // API process chỉ lưu cookie; worker giữ listener → báo worker reload.
+    await this.notifySessionRenewed(accountLabel);
+
     this.api = api;
     return { api, credentials };
+  }
+
+  async notifySessionRenewed(accountLabel: string): Promise<void> {
+    try {
+      await this.redisService.publish(ZALO_REDIS_CHANNEL_SESSION_RENEWED, {
+        accountLabel,
+        at: new Date().toISOString(),
+      });
+      this.logger.log(
+        `Published session renew for accountLabel=${accountLabel}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish session renew: ${String(error)}`,
+      );
+    }
   }
 
   async sendMessage(input: IZaloSendMessageInput): Promise<unknown> {
