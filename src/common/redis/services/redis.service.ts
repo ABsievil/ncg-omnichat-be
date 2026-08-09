@@ -140,6 +140,22 @@ export class RedisService implements OnModuleDestroy {
         return this.client;
     }
 
+    /** Separate connection — required for ioredis subscribe mode. */
+    duplicateClient(): Redis {
+        return this.client.duplicate();
+    }
+
+    async publish(channel: string, payload: unknown): Promise<number> {
+        return this.client.publish(
+            this.buildKey(channel),
+            this.serialize(payload),
+        );
+    }
+
+    channelKey(channel: string): string {
+        return this.buildKey(channel);
+    }
+
     async onModuleDestroy(): Promise<void> {
         await this.client.quit();
     }

@@ -16,21 +16,28 @@ import { ZaloSendRequestDto } from 'src/modules/zalo/dtos/request/zalo.send.requ
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
 import { ZaloSendResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.send.response.data.dto';
 import { ZaloSessionGetResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.data.dto';
+import { ZaloSessionListResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.list.response.data.dto';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
-import { ZALO_DEFAULT_ACCOUNT_LABEL } from 'src/modules/zalo/constants/zalo.constant';
 
 @Controller({ version: '1', path: '/zalo' })
 export class ZaloAdminController {
   constructor(private readonly zaloService: ZaloService) {}
 
-  @Response('zalo.get')
+  @Response('zalo.list')
   @Get('/sessions')
+  async listSessions(
+    @Query('shopId') shopId?: string,
+  ): Promise<IResponse<ZaloSessionListResponseDataDto>> {
+    const sessions = await this.zaloService.listSessions(shopId);
+    return { data: this.zaloService.mapListData(sessions) };
+  }
+
+  @Response('zalo.get')
+  @Get('/sessions/detail')
   async getSession(
-    @Query('accountLabel') accountLabel?: string,
+    @Query('shopId') shopId?: string,
   ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
-    const session = await this.zaloService.getSession(
-      accountLabel || ZALO_DEFAULT_ACCOUNT_LABEL,
-    );
+    const session = await this.zaloService.getSession(shopId);
     return { data: this.zaloService.mapGetData(session) };
   }
 
@@ -48,7 +55,11 @@ export class ZaloAdminController {
   async send(
     @Body() dto: ZaloSendRequestDto,
   ): Promise<IResponse<ZaloSendResponseDataDto>> {
-    const response = await this.zaloService.sendMessage(dto);
+    const shopId = await this.zaloService.resolveShopId(dto.shopId);
+    const response = await this.zaloService.sendMessage({
+      ...dto,
+      shopId,
+    });
     return {
       data: {
         result: { success: true, response },
@@ -59,9 +70,8 @@ export class ZaloAdminController {
   }
 
   /**
-   * SSE QR login stream.
+   * SSE QR login stream — 1 Zalo account / shop.
    * Events: qr | scanned | declined | expired | login_success | error
-   * (SSE không dùng envelope IResponse)
    */
   @SkipRequestTimeout()
   @Sse('login-qr')
@@ -83,7 +93,7 @@ export class ZaloAdminController {
 
       void (async () => {
         try {
-          const { credentials } = await this.zaloService.loginQr(
+          const { credentials, shopId } = await this.zaloService.loginQr(
             qrEvent => {
               switch (qrEvent.type) {
                 case 0:
@@ -116,14 +126,12 @@ export class ZaloAdminController {
               }
             },
             {
-              accountLabel: query.accountLabel,
+              shopId: query.shopId,
               proxy: query.proxy,
             },
           );
 
-          const session = await this.zaloService.getSession(
-            query.accountLabel || ZALO_DEFAULT_ACCOUNT_LABEL,
-          );
+          const session = await this.zaloService.getSession(shopId);
           push('login_success', {
             data: this.zaloService.mapGetData(session),
             imeiPresent: !!credentials.imei,

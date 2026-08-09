@@ -7,7 +7,6 @@ import {
   ZALO_BLOCKED_MESSAGE,
   ZALO_STOP_KEYWORDS,
 } from 'src/modules/zalo/constants/zalo.constant';
-import { IZaloMessage } from 'src/modules/zalo/interfaces/zalo.interface';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 import { OMNICHAT_BOT_HISTORY_LIMIT } from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
 import {
@@ -26,7 +25,14 @@ export class OmnichatBotService {
     private readonly aiAgentService: AiAgentService,
   ) {}
 
-  async handleIncomingMessage(rawMessage: unknown): Promise<void> {
+  /**
+   * Shared chatbot for all shops.
+   * `shopId` selects which Zalo account sends the reply.
+   */
+  async handleIncomingMessage(
+    rawMessage: unknown,
+    shopId: string,
+  ): Promise<void> {
     const message = this.zaloService.normalizeIncomingMessage(rawMessage);
     if (!message) {
       this.logger.debug('Skip non-text or invalid Zalo message');
@@ -44,11 +50,12 @@ export class OmnichatBotService {
     }
 
     this.logger.log(
-      `Process Zalo message user=${message.userId} thread=${message.threadId} type=${message.type} content=${message.messageContent}`,
+      `Process Zalo message shop=${shopId} user=${message.userId} thread=${message.threadId}`,
     );
 
     if (this.isStopMessage(message.messageContent)) {
       await this.zaloService.sendMessage({
+        shopId,
         threadId: message.threadId,
         message: ZALO_BLOCKED_MESSAGE,
         type: message.type,
@@ -69,6 +76,7 @@ export class OmnichatBotService {
     }
 
     await this.zaloService.sendMessage({
+      shopId,
       threadId: message.threadId,
       message: reply,
       type: message.type,

@@ -1,5 +1,6 @@
 {
   "get": "Lấy phiên Zalo thành công",
+  "list": "Lấy danh sách phiên Zalo thành công",
   "create": "Lưu phiên Zalo thành công",
   "send": "Gửi tin Zalo thành công",
   "error": {

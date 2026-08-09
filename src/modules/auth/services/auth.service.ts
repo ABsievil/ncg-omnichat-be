@@ -17,7 +17,12 @@ import { AuthTokenResponseDto } from 'src/modules/auth/dtos/response/auth.token.
 import { IAuthTokenPayload } from 'src/modules/auth/interfaces/auth.user.interface';
 import { AuthSessionService } from 'src/modules/auth/services/auth.session.service';
 import { OtpService } from 'src/modules/auth/services/otp.service';
-import { ENUM_USER_GENDER } from 'src/modules/user/enums/user.enum';
+import { ShopService } from 'src/modules/shop/services/shop.service';
+import {
+  ENUM_USER_GENDER,
+  ENUM_USER_ROLE,
+} from 'src/modules/user/enums/user.enum';
+import { UserDoc } from 'src/modules/user/entities/user.entity';
 import { UserRepository } from 'src/modules/user/repositories/user.repository';
 import { UserService } from 'src/modules/user/services/user.service';
 
@@ -28,6 +33,7 @@ export class AuthService {
     private readonly authSessionService: AuthSessionService,
     private readonly userRepository: UserRepository,
     private readonly userService: UserService,
+    private readonly shopService: ShopService,
     private readonly helperHashService: HelperHashService,
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly configService: ConfigService,
@@ -73,23 +79,22 @@ export class AuthService {
       throw new BadRequestException('auth.error.phoneExists');
     }
 
+    const shopId = await this.shopService.getDefaultShopId();
     const salt = this.helperHashService.randomSalt(10);
     const passwordHash = this.helperHashService.bcrypt(dto.password, salt);
     const user = await this.userRepository.create({
       phone,
       passwordHash,
       displayName: dto.displayName,
+      shopId,
+      role: ENUM_USER_ROLE.USER,
       gender: ENUM_USER_GENDER.UNKNOWN,
       bio: '',
       statusText: '',
       deleted: false,
     } as any);
 
-    return this.issueTokens({
-      userId: user._id,
-      phone,
-      userAgent,
-    });
+    return this.issueTokens(user, userAgent);
   }
 
   async verifyOtpLogin(
@@ -104,21 +109,22 @@ export class AuthService {
 
     let user = await this.userRepository.findOne({ phone });
     if (!user) {
+      const shopId = await this.shopService.getDefaultShopId();
       user = await this.userRepository.create({
         phone,
         displayName: phone,
+        shopId,
+        role: ENUM_USER_ROLE.USER,
         gender: ENUM_USER_GENDER.UNKNOWN,
         bio: '',
         statusText: '',
         deleted: false,
       } as any);
+    } else {
+      user = await this.ensureUserShopAndRole(user);
     }
 
-    return this.issueTokens({
-      userId: user._id,
-      phone,
-      userAgent,
-    });
+    return this.issueTokens(user, userAgent);
   }
 
   async loginPassword(
@@ -128,7 +134,15 @@ export class AuthService {
     const phone = this.normalizePhone(dto.phone);
     const user = await this.userRepository.findOne(
       { phone },
-      { select: { passwordHash: true, phone: true, displayName: true } },
+      {
+        select: {
+          passwordHash: true,
+          phone: true,
+          displayName: true,
+          shopId: true,
+          role: true,
+        },
+      },
     );
     if (!user?.passwordHash) {
       throw new UnauthorizedException('auth.error.invalidCredentials');
@@ -141,11 +155,8 @@ export class AuthService {
       throw new UnauthorizedException('auth.error.invalidCredentials');
     }
 
-    return this.issueTokens({
-      userId: user._id,
-      phone,
-      userAgent,
-    });
+    const ready = await this.ensureUserShopAndRole(user);
+    return this.issueTokens(ready, userAgent);
   }
 
   async refresh(refreshToken: string): Promise<AuthTokenResponseDataDto> {
@@ -155,14 +166,17 @@ export class AuthService {
       throw new UnauthorizedException('auth.error.invalidRefresh');
     }
 
-    const user = await this.userRepository.findOneById(session.userId);
+    let user = await this.userRepository.findOneById(session.userId);
     if (!user) {
       throw new UnauthorizedException('auth.error.userNotFound');
     }
+    user = await this.ensureUserShopAndRole(user);
 
     const tokens = this.buildTokenPair({
       userId: user._id,
       phone: user.phone,
+      shopId: user.shopId ?? null,
+      role: user.role,
       sessionId: session.sessionId,
     });
     await this.authSessionService.rotateRefreshToken(
@@ -207,29 +221,45 @@ export class AuthService {
     return { _id: sessionId };
   }
 
-  private async issueTokens(params: {
-    userId: string;
-    phone: string;
-    userAgent?: string;
-  }): Promise<AuthTokenResponseDataDto> {
+  private async ensureUserShopAndRole(user: UserDoc): Promise<UserDoc> {
+    let dirty = false;
+    if (!user.shopId) {
+      user.shopId = await this.shopService.getDefaultShopId();
+      dirty = true;
+    }
+    if (!user.role) {
+      user.role = ENUM_USER_ROLE.USER;
+      dirty = true;
+    }
+    if (dirty) {
+      await this.userRepository.save(user);
+    }
+    return user;
+  }
+
+  private async issueTokens(
+    user: UserDoc,
+    userAgent?: string,
+  ): Promise<AuthTokenResponseDataDto> {
     const sessionId = uuidV4();
     const tokens = this.buildTokenPair({
-      userId: params.userId,
-      phone: params.phone,
+      userId: user._id,
+      phone: user.phone,
+      shopId: user.shopId ?? null,
+      role: user.role ?? ENUM_USER_ROLE.USER,
       sessionId,
     });
 
     await this.authSessionService.createSession({
-      userId: params.userId,
+      userId: user._id,
       refreshToken: tokens.refreshToken,
-      userAgent: params.userAgent,
+      userAgent,
       sessionId,
     });
 
-    const user = await this.userRepository.findOneById(params.userId);
     return this.mapTokenData({
       ...tokens,
-      user: this.userService.mapGet(user!),
+      user: this.userService.mapGet(user),
     });
   }
 
@@ -243,6 +273,8 @@ export class AuthService {
   private buildTokenPair(params: {
     userId: string;
     phone: string;
+    shopId: string | null;
+    role: ENUM_USER_ROLE;
     sessionId: string;
   }) {
     const secret =
@@ -256,6 +288,8 @@ export class AuthService {
       sub: params.userId,
       sid: params.sessionId,
       phone: params.phone,
+      shopId: params.shopId,
+      role: params.role,
       typ: 'access',
     };
 

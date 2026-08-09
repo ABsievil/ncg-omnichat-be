@@ -4,7 +4,7 @@ import { ENUM_ZALO_SESSION_STATUS } from 'src/modules/zalo/enums/zalo.enum';
 
 export class ZaloSessionGetResponseDto extends DatabaseDto {
   @ApiProperty()
-  accountLabel!: string;
+  shopId!: string;
 
   @ApiProperty({ enum: ENUM_ZALO_SESSION_STATUS })
   status!: ENUM_ZALO_SESSION_STATUS;

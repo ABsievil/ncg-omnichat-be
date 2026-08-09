@@ -5,7 +5,10 @@ import {
 } from 'src/common/database/decorators/database.decorator';
 import { DatabaseEntityBase } from 'src/common/database/entities/database.entity';
 import { IDatabaseDocument } from 'src/common/database/interfaces/database.interface';
-import { ENUM_USER_GENDER } from 'src/modules/user/enums/user.enum';
+import {
+  ENUM_USER_GENDER,
+  ENUM_USER_ROLE,
+} from 'src/modules/user/enums/user.enum';
 
 @DatabaseEntity({ collection: 'users' })
 export class UserEntity extends DatabaseEntityBase {
@@ -16,6 +19,24 @@ export class UserEntity extends DatabaseEntityBase {
     trim: true,
   })
   phone!: string;
+
+  /** Shop the user belongs to. Null only for platform admin without shop. */
+  @DatabaseProp({
+    required: false,
+    type: String,
+    default: null,
+    index: true,
+  })
+  shopId?: string | null;
+
+  @DatabaseProp({
+    required: true,
+    type: String,
+    enum: Object.values(ENUM_USER_ROLE),
+    default: ENUM_USER_ROLE.USER,
+    index: true,
+  })
+  role!: ENUM_USER_ROLE;
 
   @DatabaseProp({
     required: false,

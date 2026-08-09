@@ -1,10 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DatabaseDto } from 'src/common/database/dtos/database.dto';
-import { ENUM_USER_GENDER } from 'src/modules/user/enums/user.enum';
+import {
+  ENUM_USER_GENDER,
+  ENUM_USER_ROLE,
+} from 'src/modules/user/enums/user.enum';
 
 export class UserGetResponseDto extends DatabaseDto {
   @ApiProperty()
   phone!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  shopId?: string | null;
+
+  @ApiProperty({ enum: ENUM_USER_ROLE })
+  role!: ENUM_USER_ROLE;
 
   @ApiProperty()
   displayName!: string;

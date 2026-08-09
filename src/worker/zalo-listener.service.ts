@@ -5,9 +5,12 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type Redis from 'ioredis';
+import { RedisService } from 'src/common/redis/services/redis.service';
 import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-bot.service';
-import { ZALO_DEFAULT_ACCOUNT_LABEL } from 'src/modules/zalo/constants/zalo.constant';
+import { ZALO_REDIS_CHANNEL_SESSION_RENEWED } from 'src/modules/zalo/constants/zalo.constant';
 import { ENUM_ZALO_SESSION_STATUS } from 'src/modules/zalo/enums/zalo.enum';
+import { IZaloListenerHandlers } from 'src/modules/zalo/interfaces/zalo.listener.interface';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 
 @Injectable()
@@ -15,79 +18,162 @@ export class ZaloListenerService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(ZaloListenerService.name);
-  private reconnectTimer: NodeJS.Timeout | undefined;
-  private messageHandler?: (message: unknown) => Promise<void>;
-  private closedHandler?: () => void;
-  private errorHandler?: (error: unknown) => void;
-  private starting = false;
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+  private readonly handlers = new Map<string, IZaloListenerHandlers>();
+  private readonly starting = new Set<string>();
+  private renewSubscriber?: Redis;
+  private readonly renewChannel: string;
 
   constructor(
     private readonly zaloService: ZaloService,
     private readonly omnichatBotService: OmnichatBotService,
     private readonly configService: ConfigService,
-  ) {}
+    private readonly redisService: RedisService,
+  ) {
+    this.renewChannel = this.redisService.channelKey(
+      ZALO_REDIS_CHANNEL_SESSION_RENEWED,
+    );
+  }
 
   async onApplicationBootstrap(): Promise<void> {
-    await this.startListener();
+    await this.subscribeSessionRenewals();
+    const shopIds = await this.zaloService.listActiveShopIds();
+    if (shopIds.length === 0) {
+      this.logger.warn(
+        'No active Zalo sessions found. Waiting for QR login renew...',
+      );
+      return;
+    }
+    await Promise.all(shopIds.map(shopId => this.startListener(shopId)));
   }
 
   onModuleDestroy(): void {
-    this.teardown();
+    for (const timer of this.reconnectTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.reconnectTimers.clear();
+    for (const shopId of [...this.handlers.keys()]) {
+      this.teardownHandlersOnly(shopId);
+    }
+    this.zaloService.clearAllApis();
+    void this.renewSubscriber?.quit();
+    this.renewSubscriber = undefined;
   }
 
-  async startListener(attempt = 0): Promise<void> {
-    if (this.starting) {
+  async startListener(shopId: string, attempt = 0): Promise<void> {
+    if (this.starting.has(shopId)) {
       return;
     }
-    this.starting = true;
+    this.starting.add(shopId);
 
     try {
-      this.teardownHandlersOnly();
+      this.teardownHandlersOnly(shopId);
+      this.zaloService.clearApi(shopId);
 
-      const api = await this.zaloService.loginWithSession(
-        ZALO_DEFAULT_ACCOUNT_LABEL,
-        { selfListen: false },
-      );
+      const api = await this.zaloService.loginWithSession(shopId, {
+        selfListen: false,
+      });
 
-      this.messageHandler = async (message: unknown) => {
+      const messageHandler = async (message: unknown) => {
         try {
-          await this.omnichatBotService.handleIncomingMessage(message);
+          await this.omnichatBotService.handleIncomingMessage(message, shopId);
         } catch (error) {
           this.logger.error(
-            `Failed to process incoming Zalo message: ${String(error)}`,
+            `Failed to process incoming Zalo message [shop=${shopId}]: ${String(error)}`,
           );
         }
       };
 
-      this.closedHandler = () => {
-        this.logger.warn('Zalo listener closed, scheduling reconnect...');
-        this.scheduleReconnect(attempt);
+      const closedHandler = () => {
+        this.logger.warn(
+          `Zalo listener closed [shop=${shopId}], scheduling reconnect...`,
+        );
+        this.scheduleReconnect(shopId, attempt);
       };
 
-      this.errorHandler = (error: unknown) => {
-        this.logger.error(`Zalo listener error: ${String(error)}`);
+      const errorHandler = (error: unknown) => {
+        this.logger.error(
+          `Zalo listener error [shop=${shopId}]: ${String(error)}`,
+        );
       };
 
-      api.listener.on('message', this.messageHandler);
-      api.listener.onConnected(() => {
-        this.logger.log('Zalo listener connected');
+      this.handlers.set(shopId, {
+        messageHandler,
+        closedHandler,
+        errorHandler,
       });
-      api.listener.onClosed(this.closedHandler);
-      api.listener.onError(this.errorHandler);
+
+      api.listener.on('message', messageHandler);
+      api.listener.onConnected(() => {
+        this.logger.log(`Zalo listener connected [shop=${shopId}]`);
+      });
+      api.listener.onClosed(closedHandler);
+      api.listener.onError(errorHandler);
       api.listener.start();
 
-      this.logger.log('Zalo listener started');
+      this.logger.log(`Zalo listener started [shop=${shopId}]`);
     } catch (error) {
-      this.logger.error(`Failed to start Zalo listener: ${String(error)}`);
-      this.scheduleReconnect(attempt);
+      this.logger.error(
+        `Failed to start Zalo listener [shop=${shopId}]: ${String(error)}`,
+      );
+      this.scheduleReconnect(shopId, attempt);
     } finally {
-      this.starting = false;
+      this.starting.delete(shopId);
     }
   }
 
-  private scheduleReconnect(attempt: number): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
+  private async subscribeSessionRenewals(): Promise<void> {
+    try {
+      this.renewSubscriber = this.redisService.duplicateClient();
+      await this.renewSubscriber.subscribe(this.renewChannel);
+      this.renewSubscriber.on('message', (channel, raw) => {
+        if (channel !== this.renewChannel) {
+          return;
+        }
+        void this.handleSessionRenewed(raw);
+      });
+      this.logger.log(
+        `Subscribed session renew channel: ${this.renewChannel}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to subscribe session renew channel: ${String(error)}`,
+      );
+    }
+  }
+
+  private async handleSessionRenewed(raw: string): Promise<void> {
+    let shopId = '';
+    try {
+      const payload = JSON.parse(raw) as { shopId?: string };
+      shopId = payload.shopId?.trim() || '';
+    } catch {
+      this.logger.warn(`Invalid session renew payload: ${raw}`);
+      return;
+    }
+
+    if (!shopId) {
+      this.logger.warn('Session renew missing shopId, ignored');
+      return;
+    }
+
+    this.logger.log(`Session renewed [shop=${shopId}], restarting listener...`);
+
+    const timer = this.reconnectTimers.get(shopId);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(shopId);
+    }
+
+    this.teardownHandlersOnly(shopId);
+    this.zaloService.clearApi(shopId);
+    await this.startListener(shopId, 0);
+  }
+
+  private scheduleReconnect(shopId: string, attempt: number): void {
+    const existing = this.reconnectTimers.get(shopId);
+    if (existing) {
+      clearTimeout(existing);
     }
 
     const maxAttempts =
@@ -97,56 +183,44 @@ export class ZaloListenerService
 
     if (attempt >= maxAttempts) {
       this.logger.error(
-        `Max reconnect attempts (${maxAttempts}) reached. Mark session expired and wait for QR renew.`,
+        `Max reconnect attempts (${maxAttempts}) reached for [shop=${shopId}]. Mark session expired.`,
       );
-      void this.zaloService.markSessionStatus(ENUM_ZALO_SESSION_STATUS.EXPIRED);
+      void this.zaloService.markSessionStatus(
+        ENUM_ZALO_SESSION_STATUS.EXPIRED,
+        shopId,
+      );
       return;
     }
 
     const delay = baseDelay * Math.pow(2, attempt);
     this.logger.warn(
-      `Reconnect attempt ${attempt + 1}/${maxAttempts} in ${delay}ms`,
+      `Reconnect [shop=${shopId}] attempt ${attempt + 1}/${maxAttempts} in ${delay}ms`,
     );
 
-    this.reconnectTimer = setTimeout(() => {
-      void this.startListener(attempt + 1);
-    }, delay);
+    this.reconnectTimers.set(
+      shopId,
+      setTimeout(() => {
+        void this.startListener(shopId, attempt + 1);
+      }, delay),
+    );
   }
 
-  private teardown(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = undefined;
-    }
-    this.teardownHandlersOnly();
-    this.zaloService.stopListener();
-  }
-
-  private teardownHandlersOnly(): void {
-    const api = this.zaloService.getApi();
-    if (!api) {
-      this.messageHandler = undefined;
-      this.closedHandler = undefined;
-      this.errorHandler = undefined;
+  private teardownHandlersOnly(shopId: string): void {
+    const api = this.zaloService.getApi(shopId);
+    const bound = this.handlers.get(shopId);
+    if (!api || !bound) {
+      this.handlers.delete(shopId);
       return;
     }
 
     try {
-      if (this.messageHandler) {
-        api.listener.off('message', this.messageHandler);
-      }
-      if (this.closedHandler) {
-        api.listener.off('closed', this.closedHandler);
-      }
-      if (this.errorHandler) {
-        api.listener.off('error', this.errorHandler);
-      }
+      api.listener.off('message', bound.messageHandler);
+      api.listener.off('closed', bound.closedHandler);
+      api.listener.off('error', bound.errorHandler);
     } catch {
       // ignore
     }
 
-    this.messageHandler = undefined;
-    this.closedHandler = undefined;
-    this.errorHandler = undefined;
+    this.handlers.delete(shopId);
   }
 }

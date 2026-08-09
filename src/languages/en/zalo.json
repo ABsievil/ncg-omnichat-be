@@ -1,5 +1,6 @@
 {
   "get": "Get Zalo session success",
+  "list": "List Zalo sessions success",
   "create": "Upsert Zalo session success",
   "send": "Send Zalo message success",
   "error": {

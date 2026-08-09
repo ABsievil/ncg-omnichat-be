@@ -2,10 +2,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 
 export class ZaloLoginQrRequestDto {
-  @ApiPropertyOptional({ default: 'default' })
+  @ApiPropertyOptional({
+    description:
+      'Shop id. Omit to use the default shop, or the authenticated user shopId.',
+  })
   @IsOptional()
   @IsString()
-  accountLabel?: string;
+  shopId?: string;
 
   @ApiPropertyOptional({
     description: 'HTTP proxy, e.g. http://user:pass@host:port',

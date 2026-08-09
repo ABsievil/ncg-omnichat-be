@@ -1,0 +1,13 @@
+{
+  "list": "List shops success",
+  "get": "Get shop success",
+  "create": "Create shop success",
+  "update": "Update shop success",
+  "delete": "Delete shop success",
+  "error": {
+    "notFound": "Shop not found",
+    "codeExists": "Shop code already exists",
+    "disabled": "Shop is disabled",
+    "cannotDeleteDefault": "Cannot delete the default shop"
+  }
+}

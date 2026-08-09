@@ -18,6 +18,7 @@ export interface IZaloMessage {
 }
 
 export interface IZaloSendMessageInput {
+  shopId: string;
   threadId: string;
   message: string;
   type?: ENUM_ZALO_THREAD_TYPE;
