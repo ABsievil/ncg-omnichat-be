@@ -11,7 +11,7 @@ import type {
   IAppException,
   IResponseMetadata,
 } from 'src/app/interfaces/app.interface';
-import type { IRequestWithContext } from 'src/common/request/interfaces/request-with-context.interface';
+import type { IRequestApp } from 'src/common/request/interfaces/request.interface';
 import {
   APP_CONFIG_KEY,
   ERROR_RESPONSE_DEFAULT,
@@ -28,7 +28,7 @@ export class AppHttpFilter implements ExceptionFilter {
   catch(exception: HttpException, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<IRequestWithContext>();
+    const request = ctx.getRequest<IRequestApp>();
 
     const apiPrefix =
       this.configService.get<string>(APP_CONFIG_KEY.API_PREFIX) ??

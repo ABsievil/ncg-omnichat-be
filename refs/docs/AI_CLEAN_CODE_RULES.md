@@ -27,7 +27,7 @@ Sử dụng tài liệu này làm guideline mặc định cho mọi phiên AI m�
 - Luồng xử lý phải theo config:
   - Đọc giá trị qua `ConfigService`
   - Truy cập key config qua constants (ví dụ: `MIDDLEWARE_CONFIG_PATH`)
-- Kiểu dữ liệu mở rộng của request phải có interface riêng (ví dụ: `IRequestWithContext`).
+- Kiểu dữ liệu mở rộng của request phải có interface riêng (ví dụ: `IRequestApp`).
 
 ## 4) Quy tắc cho exception & response
 

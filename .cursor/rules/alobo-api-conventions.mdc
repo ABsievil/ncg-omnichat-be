@@ -1,0 +1,231 @@
+---
+description: Quy tắc kiến trúc và coding convention cho api của NCG Backend (NestJS)
+alwaysApply: true
+---
+
+# Quy ước CRUD Module (NestJS)
+
+## 1. Quy ước file/DTO (cái nào tạo file, cái nào không)
+
+### A. Path param (`/:id`)
+
+- Không cần tạo request DTO cho id.
+- Dùng thẳng `@Param('<idName>')` và (khuyến nghị cho GET detail) gắn pipe:
+
+```ts
+@Param('<idName>', ExistsDBPipe(Entity.name, '_id', true)) ...
+```
+
+### B. Query (`GET /list`)
+
+- Không tạo request DTO riêng cho pagination/filter.
+- Dùng chung `PaginationListDto` + các decorator:
+  - `@PaginationQuery(...)`
+  - `@PaginationQueryFilterIn(...)`, `@PaginationQueryFilterStringContain(...)`, `@PaginationQueryFilterDateBetween(...)`, …
+- Luồng code list chuẩn:
+  `nhận params từ decorator → build find → service.findAll(...) + service.getTotal(...)`
+
+### C. Body (`POST /`, `PUT /:id`)
+
+Có body thì tạo file DTO request:
+
+- `<module>.create.request.dto.ts`
+- `<module>.update.request.dto.ts`
+
+> Update luôn kế thừa Create bằng `PartialType` (xem template ở mục 2).
+
+### D. Response DTO
+
+- `create`/`update`/`delete` thường **không** cần tạo thêm create/update response dto riêng:
+  - `create` và `update` trả về `GetResponseDto`
+  - `delete` trả về `{ _id: string }` (envelope chuẩn)
+- `list`/`get` nên có DTO riêng theo pattern:
+  - `<module>.get.response.dto.ts`
+  - `<module>.list.response.dto.ts`
+  - `<module>.get.response.data.dto.ts`
+  - `<module>.list.response.data.dto.ts`
+- `list response dto` kế thừa `get response dto` (xem mục 2).
+
+---
+
+## 2. Kế thừa DTO chuẩn (create/update & response)
+
+### Request DTO
+
+**Create**
+
+Tạo file `<module>.create.request.dto.ts` chứa toàn bộ field + class-validator.
+
+**Update (bắt buộc kế thừa Create)**
+
+```ts
+// src/modules/<module>/dtos/request/<module>.update.request.dto.ts
+import { PartialType } from '@nestjs/swagger';
+import { <Module>CreateRequestDto } from 'src/modules/<module>/dtos/request/<module>.create.request.dto';
+
+export class <Module>UpdateRequestDto extends PartialType(<Module>CreateRequestDto) {}
+```
+
+### Response DTO
+
+**GetResponseDto**
+
+Kế thừa `DatabaseDto`: chứa `_id`, `createdAt`, `updatedAt`, `deleted`, …
+
+**ListResponseDto**
+
+Kế thừa `GetResponseDto` (thường để trống class body):
+
+```ts
+export class <Module>ListResponseDto extends <Module>GetResponseDto {}
+```
+
+### Data DTO
+
+- `GetResponseDataDto extends ResponseDataBaseDto`
+  - field đơn: `<module>: <Module>GetResponseDto`
+- `ListResponseDataDto extends ResponseDataBaseDto`
+  - field mảng: `<modules>: <Module>ListResponseDto[]`
+
+---
+
+## 3. Template CRUD endpoints (controller)
+
+### GET list: `GET /list`
+
+Decorator + query pattern:
+
+```ts
+@ResponsePaging('<module>.list')
+@PaginationQuery({ defaultPerPage, availableSearch, availableOrderBy })
+```
+
+Thêm các filter decorator cho từng field cần lọc.
+
+**Template luồng code (rút gọn):**
+
+```ts
+@ResponsePaging('<module>.list')
+@Get('/list')
+async getList(
+  @PaginationQuery({ defaultPerPage, availableSearch, availableOrderBy })
+  { _search, _limit, _offset, _order }: PaginationListDto,
+  @PaginationQueryFilterIn('status', { isNumber: true })
+  statusFilter: Record<string, any>,
+  // ...filter khác
+): Promise<IResponsePaging<<Module>ListResponseDataDto>> {
+  const find = { ..._search, ...statusFilter /* ... */ };
+
+  const [items, total] = await Promise.all([
+    this.<module>Service.findAll(find, {
+      paging: { limit: _limit, offset: _offset },
+      order: _order,
+    }),
+    this.<module>Service.getTotal(find),
+  ]);
+
+  const totalPage = this.paginationService.totalPage(total, _limit);
+
+  return {
+    data: this.<module>Service.mapList(items),
+    _pagination: { total, totalPage },
+  };
+}
+```
+
+**Cách FE truyền pagination/filter (thực tế backend dùng):**
+
+- `page` (mặc định 1)
+- `perPage` (mặc định theo `defaultPerPage`)
+- `search` (tìm kiếm theo các field trong `availableSearch`)
+- `orderBy`, `orderDirection` (theo `availableOrderBy`)
+- thêm query filter theo field (vd `status`, `type`, … tùy decorator bạn gắn)
+
+### GET detail: `GET /:id`
+
+Khuyến nghị dùng `ExistsDBPipe` cho id:
+
+```ts
+@Response('<module>.detail')
+@Get('/:id')
+async get(
+  @Param('id', ExistsDBPipe(<Entity>.name, '_id', true))
+  entity: <Module>Doc
+): Promise<IResponse<<Module>GetResponseDto>> {
+  return { data: this.<module>Service.mapGet(entity) };
+}
+```
+
+### POST create: `POST /`
+
+```ts
+@Response('<module>.create')
+@Post('/')
+async create(
+  @Body() body: <Module>CreateRequestDto
+): Promise<IResponse<<Module>GetResponseDto>> {
+  const entity = await this.<module>Service.create(body);
+  return { data: this.<module>Service.mapGet(entity) };
+}
+```
+
+### PUT update: `PUT /:id`
+
+```ts
+@Response('<module>.update')
+@Put('/:id')
+async update(
+  @Param('id') id: string,
+  @Body() body: <Module>UpdateRequestDto
+): Promise<IResponse<<Module>GetResponseDto>> {
+  const entity = await this.<module>Service.update({ _id: id }, body);
+  return { data: this.<module>Service.mapGet(entity) };
+}
+```
+
+### DELETE: `DELETE /:id`
+
+Thường là soft-delete:
+
+```ts
+@Response('<module>.delete')
+@Delete('/:id')
+async delete(
+  @Param('id') id: string
+): Promise<IResponse<{ _id: string }>> {
+  await this.<module>Service.softDelete({ _id: id });
+  return { data: { _id: id } };
+}
+```
+
+---
+
+## 4. Lưu ý "pattern bắt buộc" (pagination / exist pipe / object assign)
+
+### Pagination GET list
+
+Backend chuẩn hoá bằng:
+
+- `@PaginationQuery(...)` để tạo `_limit`/`_offset`/`_order`/`_search`
+- `PaginationService.totalPage(total, _limit)` để trả `totalPage`
+- response luôn có `_pagination: { total, totalPage }`
+
+### GET one dùng `ExistsDBPipe`
+
+`ExistsDBPipe(Entity.name, '_id', true)`:
+
+- nếu không tồn tại thì throw `NotFoundException`
+- nếu tồn tại và `isFullValue=true` thì param nhận luôn document
+
+### Create dùng `Object.assign(new Entity(), ...)` ở service
+
+Pattern mẫu (đang dùng trong codebase):
+
+````ts
+const dtoPlain = instanceToPlain(dto);
+const entity = Object.assign(new <Entity>(), { ...dtoPlain, /* <default fields> */ });
+// rồi gọi repository create(...)
+```---
+alwaysApply: true
+---
+````

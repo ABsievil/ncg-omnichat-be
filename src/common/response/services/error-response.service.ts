@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import type { IResponseMetadata } from 'src/app/interfaces/app.interface';
-import type { IRequestWithContext } from 'src/common/request/interfaces/request-with-context.interface';
+import type { IRequestApp } from 'src/common/request/interfaces/request.interface';
 import {
   APP_CONFIG_KEY,
   ERROR_RESPONSE_DEFAULT,
@@ -13,7 +13,7 @@ import { ErrorResponseHeader } from 'src/common/response/enums/error-response.en
 export class ErrorResponseService {
   constructor(private readonly configService: ConfigService) {}
 
-  buildMetadata(req: IRequestWithContext): IResponseMetadata {
+  buildMetadata(req: IRequestApp): IResponseMetadata {
     const apiVersion =
       this.configService.get<string>(APP_CONFIG_KEY.API_VERSION) ??
       ERROR_RESPONSE_DEFAULT.API_VERSION;
