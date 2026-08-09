@@ -44,7 +44,7 @@ export abstract class DatabaseRepositoryBaseHelper<
     protected readonly _repository: Model<Entity>;
     readonly _join?: PopulateOptions | (string | PopulateOptions)[];
 
-    @Inject(REQUEST) public readonly _request: IRequestApp;
+    @Inject(REQUEST) public readonly _request!: IRequestApp;
 
     constructor(
         repository: Model<Entity>,

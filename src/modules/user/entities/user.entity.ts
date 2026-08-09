@@ -15,7 +15,7 @@ export class UserEntity extends DatabaseEntityBase {
     index: true,
     trim: true,
   })
-  phone: string;
+  phone!: string;
 
   @DatabaseProp({
     required: false,
@@ -28,7 +28,7 @@ export class UserEntity extends DatabaseEntityBase {
     trim: true,
     maxlength: 80,
   })
-  displayName: string;
+  displayName!: string;
 
   @DatabaseProp({
     required: false,
