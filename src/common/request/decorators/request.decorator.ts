@@ -2,6 +2,7 @@ import { applyDecorators, SetMetadata } from '@nestjs/common';
 import {
     REQUEST_CUSTOM_TIMEOUT_META_KEY,
     REQUEST_CUSTOM_TIMEOUT_VALUE_META_KEY,
+    REQUEST_SKIP_TIMEOUT_META_KEY,
 } from 'src/common/request/constants/request.constant';
 
 export function RequestTimeout(seconds: string): MethodDecorator {
@@ -9,4 +10,9 @@ export function RequestTimeout(seconds: string): MethodDecorator {
         SetMetadata(REQUEST_CUSTOM_TIMEOUT_META_KEY, true),
         SetMetadata(REQUEST_CUSTOM_TIMEOUT_VALUE_META_KEY, seconds)
     );
+}
+
+/** Bypass RequestTimeoutInterceptor — required for SSE / long-poll streams. */
+export function SkipRequestTimeout(): MethodDecorator {
+    return SetMetadata(REQUEST_SKIP_TIMEOUT_META_KEY, true);
 }

@@ -12,6 +12,7 @@ import { catchError, timeout } from 'rxjs/operators';
 import {
     REQUEST_CUSTOM_TIMEOUT_META_KEY,
     REQUEST_CUSTOM_TIMEOUT_VALUE_META_KEY,
+    REQUEST_SKIP_TIMEOUT_META_KEY,
 } from 'src/common/request/constants/request.constant';
 import { ENUM_REQUEST_STATUS_CODE_ERROR } from 'src/common/request/enums/request.status-code.enum';
 
@@ -30,50 +31,56 @@ export class RequestTimeoutInterceptor
     }
 
     intercept(context: ExecutionContext, next: CallHandler): Observable<void> {
-        if (context.getType() === 'http') {
-            const customTimeout = this.reflector.get<boolean>(
-                REQUEST_CUSTOM_TIMEOUT_META_KEY,
-                context.getHandler()
-            );
-
-            if (customTimeout) {
-                const seconds: string = this.reflector.get<string>(
-                    REQUEST_CUSTOM_TIMEOUT_VALUE_META_KEY,
-                    context.getHandler()
-                );
-
-                const timeoutMs = (Number(seconds) || 30) * 1000;
-
-                return next.handle().pipe(
-                    timeout(timeoutMs),
-                    catchError(err => {
-                        if (err instanceof TimeoutError) {
-                            throw new RequestTimeoutException({
-                                statusCode:
-                                    ENUM_REQUEST_STATUS_CODE_ERROR.TIMEOUT,
-                                message: 'http.clientError.requestTimeOut',
-                            });
-                        }
-                        return throwError(() => err);
-                    })
-                );
-            } else {
-                return next.handle().pipe(
-                    timeout(this.maxTimeoutInSecond * 1000),
-                    catchError(err => {
-                        if (err instanceof TimeoutError) {
-                            throw new RequestTimeoutException({
-                                statusCode:
-                                    ENUM_REQUEST_STATUS_CODE_ERROR.TIMEOUT,
-                                message: 'http.clientError.requestTimeOut',
-                            });
-                        }
-                        return throwError(() => err);
-                    })
-                );
-            }
+        if (context.getType() !== 'http') {
+            return next.handle();
         }
 
-        return next.handle();
+        const skipTimeout = this.reflector.getAllAndOverride<boolean>(
+            REQUEST_SKIP_TIMEOUT_META_KEY,
+            [context.getHandler(), context.getClass()]
+        );
+        if (skipTimeout) {
+            return next.handle();
+        }
+
+        // Nest @Sse() sets metadata key `__sse__`
+        const isSse = this.reflector.getAllAndOverride<boolean>('__sse__', [
+            context.getHandler(),
+            context.getClass(),
+        ]);
+        if (isSse) {
+            return next.handle();
+        }
+
+        const customTimeout = this.reflector.get<boolean>(
+            REQUEST_CUSTOM_TIMEOUT_META_KEY,
+            context.getHandler()
+        );
+
+        const timeoutMs = customTimeout
+            ? (Number(
+                  this.reflector.get<string>(
+                      REQUEST_CUSTOM_TIMEOUT_VALUE_META_KEY,
+                      context.getHandler()
+                  )
+              ) || 30) * 1000
+            : this.maxTimeoutInSecond * 1000;
+
+        return next.handle().pipe(
+            timeout(timeoutMs),
+            catchError(err => {
+                if (err instanceof TimeoutError) {
+                    return throwError(
+                        () =>
+                            new RequestTimeoutException({
+                                statusCode:
+                                    ENUM_REQUEST_STATUS_CODE_ERROR.TIMEOUT,
+                                message: 'http.clientError.requestTimeOut',
+                            })
+                    );
+                }
+                return throwError(() => err);
+            })
+        );
     }
 }
