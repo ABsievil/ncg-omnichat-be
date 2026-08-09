@@ -155,7 +155,27 @@ export class ZaloService implements OnModuleDestroy {
       { select: { shopId: 1 } },
     );
 
-    return sessions.map(session => String(session.shopId));
+    return [
+      ...new Set(
+        sessions
+          .map(session => String(session.shopId ?? '').trim())
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  /** Worker-safe lookup: no shop assert / no default fallback. */
+  async findSessionByShopId(
+    shopId: string,
+  ): Promise<ZaloSessionGetResponseDto | null> {
+    const resolved = shopId?.trim();
+    if (!resolved) {
+      return null;
+    }
+    const session = await this.zaloSessionRepository.findOne({
+      shopId: resolved,
+    });
+    return session ? this.mapGet(session) : null;
   }
 
   async markSessionStatus(

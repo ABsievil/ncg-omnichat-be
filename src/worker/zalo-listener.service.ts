@@ -74,7 +74,7 @@ export class ZaloListenerService
     this.starting.add(shopId);
 
     try {
-      const session = await this.zaloService.getSession(shopId);
+      const session = await this.zaloService.findSessionByShopId(shopId);
       if (!session || session.status !== ENUM_ZALO_SESSION_STATUS.ACTIVE) {
         this.logger.log(
           `Skip listener start — session not active [shop=${shopId} status=${session?.status ?? 'missing'}]`,
