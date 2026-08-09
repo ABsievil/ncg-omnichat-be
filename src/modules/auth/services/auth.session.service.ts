@@ -17,8 +17,6 @@ export class AuthSessionService {
 
   async createSession(params: {
     userId: string;
-    deviceId: string;
-    deviceName: string;
     refreshToken: string;
     userAgent?: string;
     sessionId?: string;
@@ -28,8 +26,6 @@ export class AuthSessionService {
     const session: IAuthSession = {
       sessionId,
       userId: params.userId,
-      deviceId: params.deviceId,
-      deviceName: params.deviceName,
       refreshTokenHash: this.helperHashService.sha256(params.refreshToken),
       createdAt: now,
       lastActiveAt: now,

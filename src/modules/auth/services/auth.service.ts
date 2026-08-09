@@ -7,15 +7,19 @@ import { ConfigService } from '@nestjs/config';
 import { v4 as uuidV4 } from 'uuid';
 import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
 import { HelperHashService } from 'src/common/helper/services/helper.hash.service';
+import { AuthLoginPasswordRequestDto } from 'src/modules/auth/dtos/request/auth.login-password.request.dto';
+import { AuthRegisterRequestDto } from 'src/modules/auth/dtos/request/auth.register.request.dto';
+import { AuthVerifyOtpRequestDto } from 'src/modules/auth/dtos/request/auth.verify-otp.request.dto';
+import { AuthOtpResponseDataDto } from 'src/modules/auth/dtos/response/auth.otp.response.data.dto';
+import { AuthSessionListResponseDataDto } from 'src/modules/auth/dtos/response/auth.session.list.response.data.dto';
+import { AuthTokenResponseDataDto } from 'src/modules/auth/dtos/response/auth.token.response.data.dto';
+import { AuthTokenResponseDto } from 'src/modules/auth/dtos/response/auth.token.response.dto';
+import { IAuthTokenPayload } from 'src/modules/auth/interfaces/auth.user.interface';
 import { AuthSessionService } from 'src/modules/auth/services/auth.session.service';
 import { OtpService } from 'src/modules/auth/services/otp.service';
-import { LoginPasswordDto } from 'src/modules/auth/dtos/auth.login-password.dto';
-import { RegisterDto } from 'src/modules/auth/dtos/auth.register.dto';
-import { VerifyOtpDto } from 'src/modules/auth/dtos/auth.verify-otp.dto';
+import { ENUM_USER_GENDER } from 'src/modules/user/enums/user.enum';
 import { UserRepository } from 'src/modules/user/repositories/user.repository';
 import { UserService } from 'src/modules/user/services/user.service';
-import { ENUM_USER_GENDER } from 'src/modules/user/enums/user.enum';
-import { IAuthTokenPayload } from 'src/modules/auth/interfaces/auth.user.interface';
 
 @Injectable()
 export class AuthService {
@@ -40,11 +44,24 @@ export class AuthService {
     return `+${cleaned}`;
   }
 
-  async requestOtp(phoneRaw: string) {
-    return this.otpService.requestOtp(this.normalizePhone(phoneRaw));
+  private emptyMeta() {
+    return { createdBy: [] as [], updatedBy: [] as [] };
   }
 
-  async register(dto: RegisterDto, userAgent?: string) {
+  async requestOtp(phoneRaw: string): Promise<AuthOtpResponseDataDto> {
+    const otp = await this.otpService.requestOtp(
+      this.normalizePhone(phoneRaw),
+    );
+    return {
+      otp,
+      ...this.emptyMeta(),
+    };
+  }
+
+  async register(
+    dto: AuthRegisterRequestDto,
+    userAgent?: string,
+  ): Promise<AuthTokenResponseDataDto> {
     const phone = this.normalizePhone(dto.phone);
     const ok = await this.otpService.verifyOtp(phone, dto.otp);
     if (!ok) {
@@ -71,13 +88,14 @@ export class AuthService {
     return this.issueTokens({
       userId: user._id,
       phone,
-      deviceId: dto.deviceId,
-      deviceName: dto.deviceName ?? 'Unknown device',
       userAgent,
     });
   }
 
-  async verifyOtpLogin(dto: VerifyOtpDto, userAgent?: string) {
+  async verifyOtpLogin(
+    dto: AuthVerifyOtpRequestDto,
+    userAgent?: string,
+  ): Promise<AuthTokenResponseDataDto> {
     const phone = this.normalizePhone(dto.phone);
     const ok = await this.otpService.verifyOtp(phone, dto.otp);
     if (!ok) {
@@ -99,13 +117,14 @@ export class AuthService {
     return this.issueTokens({
       userId: user._id,
       phone,
-      deviceId: dto.deviceId,
-      deviceName: dto.deviceName ?? 'Unknown device',
       userAgent,
     });
   }
 
-  async loginPassword(dto: LoginPasswordDto, userAgent?: string) {
+  async loginPassword(
+    dto: AuthLoginPasswordRequestDto,
+    userAgent?: string,
+  ): Promise<AuthTokenResponseDataDto> {
     const phone = this.normalizePhone(dto.phone);
     const user = await this.userRepository.findOne(
       { phone },
@@ -125,13 +144,11 @@ export class AuthService {
     return this.issueTokens({
       userId: user._id,
       phone,
-      deviceId: dto.deviceId,
-      deviceName: dto.deviceName ?? 'Unknown device',
       userAgent,
     });
   }
 
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string): Promise<AuthTokenResponseDataDto> {
     const session =
       await this.authSessionService.findByRefreshToken(refreshToken);
     if (!session) {
@@ -154,40 +171,47 @@ export class AuthService {
       tokens.refreshToken,
     );
 
-    return {
+    return this.mapTokenData({
       ...tokens,
-      user: this.userService.toPublic(user),
+      user: this.userService.mapGet(user),
+    });
+  }
+
+  async logout(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ _id: string }> {
+    await this.authSessionService.revokeSession(userId, sessionId);
+    return { _id: sessionId };
+  }
+
+  async listSessions(
+    userId: string,
+  ): Promise<AuthSessionListResponseDataDto> {
+    const sessions = await this.authSessionService.listSessions(userId);
+    return {
+      sessions: sessions.map(s => ({
+        sessionId: s.sessionId,
+        createdAt: s.createdAt,
+        lastActiveAt: s.lastActiveAt,
+      })),
+      ...this.emptyMeta(),
     };
   }
 
-  async logout(userId: string, sessionId: string) {
+  async revokeSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ _id: string }> {
     await this.authSessionService.revokeSession(userId, sessionId);
-    return { ok: true };
-  }
-
-  async listSessions(userId: string) {
-    const sessions = await this.authSessionService.listSessions(userId);
-    return sessions.map(s => ({
-      sessionId: s.sessionId,
-      deviceId: s.deviceId,
-      deviceName: s.deviceName,
-      createdAt: s.createdAt,
-      lastActiveAt: s.lastActiveAt,
-    }));
-  }
-
-  async revokeSession(userId: string, sessionId: string) {
-    await this.authSessionService.revokeSession(userId, sessionId);
-    return { ok: true };
+    return { _id: sessionId };
   }
 
   private async issueTokens(params: {
     userId: string;
     phone: string;
-    deviceId: string;
-    deviceName: string;
     userAgent?: string;
-  }) {
+  }): Promise<AuthTokenResponseDataDto> {
     const sessionId = uuidV4();
     const tokens = this.buildTokenPair({
       userId: params.userId,
@@ -197,17 +221,22 @@ export class AuthService {
 
     await this.authSessionService.createSession({
       userId: params.userId,
-      deviceId: params.deviceId,
-      deviceName: params.deviceName,
       refreshToken: tokens.refreshToken,
       userAgent: params.userAgent,
       sessionId,
     });
 
     const user = await this.userRepository.findOneById(params.userId);
-    return {
+    return this.mapTokenData({
       ...tokens,
-      user: this.userService.toPublic(user!),
+      user: this.userService.mapGet(user!),
+    });
+  }
+
+  private mapTokenData(auth: AuthTokenResponseDto): AuthTokenResponseDataDto {
+    return {
+      auth,
+      ...this.emptyMeta(),
     };
   }
 

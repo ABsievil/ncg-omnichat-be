@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { UserRepository } from 'src/modules/user/repositories/user.repository';
-import { UpdateProfileDto } from 'src/modules/user/dtos/user.update-profile.dto';
+import { UserUpdateRequestDto } from 'src/modules/user/dtos/request/user.update.request.dto';
+import { UserGetResponseDto } from 'src/modules/user/dtos/response/user.get.response.dto';
+import { UserGetResponseDataDto } from 'src/modules/user/dtos/response/user.get.response.data.dto';
 import { UserDoc } from 'src/modules/user/entities/user.entity';
 
 @Injectable()
@@ -21,7 +23,7 @@ export class UserService {
 
   async updateProfile(
     userId: string,
-    dto: UpdateProfileDto,
+    dto: UserUpdateRequestDto,
   ): Promise<UserDoc> {
     const user = await this.findById(userId);
     Object.assign(user, {
@@ -36,9 +38,16 @@ export class UserService {
     return this.userRepository.save(user);
   }
 
-  toPublic(user: UserDoc) {
+  mapGet(user: UserDoc): UserGetResponseDto {
     return {
-      _id: user._id,
+      _id: String(user._id),
+      createdAt: user.createdAt as Date,
+      updatedAt: (user.updatedAt as Date) ?? (user.createdAt as Date),
+      createdBy: user.createdBy,
+      updatedBy: user.updatedBy,
+      deleted: !!user.deleted,
+      deletedAt: user.deletedAt,
+      deletedBy: user.deletedBy,
       phone: user.phone,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl ?? null,
@@ -48,7 +57,14 @@ export class UserService {
       dob: user.dob ?? null,
       statusText: user.statusText ?? '',
       lastActiveAt: user.lastActiveAt ?? null,
-      createdAt: user.createdAt,
+    };
+  }
+
+  mapGetData(user: UserDoc): UserGetResponseDataDto {
+    return {
+      user: this.mapGet(user),
+      createdBy: [],
+      updatedBy: [],
     };
   }
 }

@@ -1,0 +1,8 @@
+{
+  "get": "Lấy thông tin người dùng thành công",
+  "update": "Cập nhật người dùng thành công",
+  "error": {
+    "notFound": "Không tìm thấy người dùng",
+    "phoneRequired": "Số điện thoại là bắt buộc"
+  }
+}

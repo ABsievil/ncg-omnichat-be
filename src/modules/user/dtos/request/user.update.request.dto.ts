@@ -3,12 +3,11 @@ import {
   IsEnum,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
 } from 'class-validator';
 import { ENUM_USER_GENDER } from 'src/modules/user/enums/user.enum';
 
-export class UpdateProfileDto {
+export class UserUpdateRequestDto {
   @IsOptional()
   @IsString()
   @MaxLength(80)

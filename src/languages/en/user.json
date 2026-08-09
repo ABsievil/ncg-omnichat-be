@@ -1,0 +1,8 @@
+{
+  "get": "Get user success",
+  "update": "Update user success",
+  "error": {
+    "notFound": "User not found",
+    "phoneRequired": "Phone is required"
+  }
+}

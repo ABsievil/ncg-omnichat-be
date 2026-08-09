@@ -14,8 +14,6 @@ export interface IAuthTokenPayload {
 export interface IAuthSession {
   sessionId: string;
   userId: string;
-  deviceId: string;
-  deviceName: string;
   refreshTokenHash: string;
   createdAt: string;
   lastActiveAt: string;
