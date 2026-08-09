@@ -19,8 +19,10 @@ export class AppResponseTimeMiddleware implements NestMiddleware {
     const headerName = this.headerName;
     const end = res.end.bind(res);
     res.end = ((...args: unknown[]) => {
-      const ms = Number(process.hrtime.bigint() - start) / 1e6;
-      res.setHeader(headerName, `${ms.toFixed(3)}ms`);
+      if (!res.headersSent) {
+        const ms = Number(process.hrtime.bigint() - start) / 1e6;
+        res.setHeader(headerName, `${ms.toFixed(3)}ms`);
+      }
       return (end as (...a: unknown[]) => unknown)(...args);
     }) as typeof res.end;
     next();

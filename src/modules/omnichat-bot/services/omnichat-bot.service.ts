@@ -43,6 +43,10 @@ export class OmnichatBotService {
       return;
     }
 
+    this.logger.log(
+      `Process Zalo message user=${message.userId} thread=${message.threadId} type=${message.type} content=${message.messageContent}`,
+    );
+
     if (this.isStopMessage(message.messageContent)) {
       await this.zaloService.sendMessage({
         threadId: message.threadId,

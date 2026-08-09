@@ -131,7 +131,7 @@ export class ZaloAdminController {
           const message =
             error instanceof Error ? error.message : String(error);
           push('error', { message });
-          subscriber.error(error);
+          subscriber.complete();
         }
       })();
 
