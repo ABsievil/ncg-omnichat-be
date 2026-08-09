@@ -69,15 +69,31 @@ jobs:
                         exit 1
                       fi
 
-                      if [ ! -d "$APP_DIR/.git" ]; then
-                        mkdir -p "$APP_DIR"
-                        git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+                      mkdir -p "$APP_DIR"
+                      cd "$APP_DIR"
+
+                      # Dir may already exist (e.g. with .env) but without .git — avoid
+                      # "destination path already exists and is not an empty directory".
+                      if [ ! -d .git ]; then
+                        git init
+                        git remote remove origin 2>/dev/null || true
+                        git remote add origin "$REPO_URL"
+                      else
+                        git remote set-url origin "$REPO_URL"
                       fi
 
-                      cd "$APP_DIR"
+                      # Keep local .env across forced checkout/reset.
+                      if [ -f .env ]; then
+                        cp .env /tmp/omnichat.env.bak
+                      fi
+
                       git fetch origin "$BRANCH"
-                      git checkout "$BRANCH"
+                      git checkout -f -B "$BRANCH" "origin/$BRANCH"
                       git reset --hard "origin/$BRANCH"
+
+                      if [ -f /tmp/omnichat.env.bak ]; then
+                        mv /tmp/omnichat.env.bak .env
+                      fi
 
                       if [ ! -f ./deploy.sh ]; then
                         echo "deploy.sh not found in $APP_DIR on branch $BRANCH"
