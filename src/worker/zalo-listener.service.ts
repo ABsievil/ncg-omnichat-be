@@ -8,7 +8,10 @@ import { ConfigService } from '@nestjs/config';
 import type Redis from 'ioredis';
 import { RedisService } from 'src/common/redis/services/redis.service';
 import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-bot.service';
-import { ZALO_REDIS_CHANNEL_SESSION_RENEWED } from 'src/modules/zalo/constants/zalo.constant';
+import {
+  ZALO_REDIS_CHANNEL_SESSION_DISABLED,
+  ZALO_REDIS_CHANNEL_SESSION_RENEWED,
+} from 'src/modules/zalo/constants/zalo.constant';
 import { ENUM_ZALO_SESSION_STATUS } from 'src/modules/zalo/enums/zalo.enum';
 import { IZaloListenerHandlers } from 'src/modules/zalo/interfaces/zalo.listener.interface';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
@@ -21,8 +24,9 @@ export class ZaloListenerService
   private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly handlers = new Map<string, IZaloListenerHandlers>();
   private readonly starting = new Set<string>();
-  private renewSubscriber?: Redis;
+  private eventSubscriber?: Redis;
   private readonly renewChannel: string;
+  private readonly disabledChannel: string;
 
   constructor(
     private readonly zaloService: ZaloService,
@@ -33,10 +37,13 @@ export class ZaloListenerService
     this.renewChannel = this.redisService.channelKey(
       ZALO_REDIS_CHANNEL_SESSION_RENEWED,
     );
+    this.disabledChannel = this.redisService.channelKey(
+      ZALO_REDIS_CHANNEL_SESSION_DISABLED,
+    );
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    await this.subscribeSessionRenewals();
+    await this.subscribeSessionEvents();
     const shopIds = await this.zaloService.listActiveShopIds();
     if (shopIds.length === 0) {
       this.logger.warn(
@@ -56,8 +63,8 @@ export class ZaloListenerService
       this.teardownHandlersOnly(shopId);
     }
     this.zaloService.clearAllApis();
-    void this.renewSubscriber?.quit();
-    this.renewSubscriber = undefined;
+    void this.eventSubscriber?.quit();
+    this.eventSubscriber = undefined;
   }
 
   async startListener(shopId: string, attempt = 0): Promise<void> {
@@ -67,6 +74,14 @@ export class ZaloListenerService
     this.starting.add(shopId);
 
     try {
+      const session = await this.zaloService.getSession(shopId);
+      if (!session || session.status !== ENUM_ZALO_SESSION_STATUS.ACTIVE) {
+        this.logger.log(
+          `Skip listener start — session not active [shop=${shopId} status=${session?.status ?? 'missing'}]`,
+        );
+        return;
+      }
+
       this.teardownHandlersOnly(shopId);
       this.zaloService.clearApi(shopId);
 
@@ -122,59 +137,81 @@ export class ZaloListenerService
     }
   }
 
-  private async subscribeSessionRenewals(): Promise<void> {
+  private async subscribeSessionEvents(): Promise<void> {
     try {
-      this.renewSubscriber = this.redisService.duplicateClient();
-      await this.renewSubscriber.subscribe(this.renewChannel);
-      this.renewSubscriber.on('message', (channel, raw) => {
-        if (channel !== this.renewChannel) {
+      this.eventSubscriber = this.redisService.duplicateClient();
+      await this.eventSubscriber.subscribe(
+        this.renewChannel,
+        this.disabledChannel,
+      );
+      this.eventSubscriber.on('message', (channel, raw) => {
+        if (channel === this.renewChannel) {
+          void this.handleSessionRenewed(raw);
           return;
         }
-        void this.handleSessionRenewed(raw);
+        if (channel === this.disabledChannel) {
+          void this.handleSessionDisabled(raw);
+        }
       });
       this.logger.log(
-        `Subscribed session renew channel: ${this.renewChannel}`,
+        `Subscribed session channels: ${this.renewChannel}, ${this.disabledChannel}`,
       );
     } catch (error) {
       this.logger.error(
-        `Failed to subscribe session renew channel: ${String(error)}`,
+        `Failed to subscribe session channels: ${String(error)}`,
       );
     }
   }
 
-  private async handleSessionRenewed(raw: string): Promise<void> {
-    let shopId = '';
+  private parseShopIdPayload(raw: string): string | null {
     try {
       const payload = JSON.parse(raw) as { shopId?: string };
-      shopId = payload.shopId?.trim() || '';
+      const shopId = payload.shopId?.trim() || '';
+      return shopId || null;
     } catch {
+      return null;
+    }
+  }
+
+  private async handleSessionRenewed(raw: string): Promise<void> {
+    const shopId = this.parseShopIdPayload(raw);
+    if (!shopId) {
       this.logger.warn(`Invalid session renew payload: ${raw}`);
       return;
     }
 
-    if (!shopId) {
-      this.logger.warn('Session renew missing shopId, ignored');
-      return;
-    }
-
     this.logger.log(`Session renewed [shop=${shopId}], restarting listener...`);
-
-    const timer = this.reconnectTimers.get(shopId);
-    if (timer) {
-      clearTimeout(timer);
-      this.reconnectTimers.delete(shopId);
-    }
-
+    this.cancelReconnect(shopId);
     this.teardownHandlersOnly(shopId);
     this.zaloService.clearApi(shopId);
     await this.startListener(shopId, 0);
   }
 
-  private scheduleReconnect(shopId: string, attempt: number): void {
-    const existing = this.reconnectTimers.get(shopId);
-    if (existing) {
-      clearTimeout(existing);
+  private async handleSessionDisabled(raw: string): Promise<void> {
+    const shopId = this.parseShopIdPayload(raw);
+    if (!shopId) {
+      this.logger.warn(`Invalid session disabled payload: ${raw}`);
+      return;
     }
+
+    this.logger.log(
+      `Session disabled [shop=${shopId}], stopping listener (no auto-reply)...`,
+    );
+    this.cancelReconnect(shopId);
+    this.teardownHandlersOnly(shopId);
+    this.zaloService.clearApi(shopId);
+  }
+
+  private cancelReconnect(shopId: string): void {
+    const timer = this.reconnectTimers.get(shopId);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(shopId);
+    }
+  }
+
+  private scheduleReconnect(shopId: string, attempt: number): void {
+    this.cancelReconnect(shopId);
 
     const maxAttempts =
       this.configService.get<number>('zalo.maxReconnectAttempts') ?? 5;

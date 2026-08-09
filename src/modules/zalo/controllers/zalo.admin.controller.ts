@@ -13,6 +13,7 @@ import { Response } from 'src/common/response/decorators/response.decorator';
 import { IResponse } from 'src/common/response/interfaces/response.interface';
 import { ZaloLoginQrRequestDto } from 'src/modules/zalo/dtos/request/zalo.login-qr.request.dto';
 import { ZaloSendRequestDto } from 'src/modules/zalo/dtos/request/zalo.send.request.dto';
+import { ZaloSessionDisconnectRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.disconnect.request.dto';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
 import { ZaloSendResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.send.response.data.dto';
 import { ZaloSessionGetResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.data.dto';
@@ -35,7 +36,7 @@ export class ZaloAdminController {
   @Response('zalo.get')
   @Get('/sessions/detail')
   async getSession(
-    @Query('shopId') shopId?: string,
+    @Query('shopId') shopId: string,
   ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
     const session = await this.zaloService.getSession(shopId);
     return { data: this.zaloService.mapGetData(session) };
@@ -47,6 +48,15 @@ export class ZaloAdminController {
     @Body() dto: ZaloSessionUpsertRequestDto,
   ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
     const session = await this.zaloService.upsertSession(dto);
+    return { data: this.zaloService.mapGetData(session) };
+  }
+
+  @Response('zalo.disconnect')
+  @Post('/sessions/disconnect')
+  async disconnectSession(
+    @Body() dto: ZaloSessionDisconnectRequestDto,
+  ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
+    const session = await this.zaloService.disconnectSession(dto.shopId);
     return { data: this.zaloService.mapGetData(session) };
   }
 

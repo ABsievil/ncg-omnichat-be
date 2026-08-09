@@ -21,7 +21,7 @@ export class OmnichatBotService {
   ) {}
 
   /**
-   * Shared chatbot for all shops.
+   * Handle an incoming Zalo message for a shop.
    * `shopId` selects which Zalo account sends the reply.
    */
   async handleIncomingMessage(

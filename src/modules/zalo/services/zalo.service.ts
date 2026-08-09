@@ -1,17 +1,14 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ThreadType, Zalo, type API } from 'zca-js';
 import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
 import { RedisService } from 'src/common/redis/services/redis.service';
 import { ShopService } from 'src/modules/shop/services/shop.service';
+import { ShopError } from 'src/modules/shop/errors/shop.error';
 import {
   ZALO_LOGIN_MAX_RETRIES,
   ZALO_LOGIN_RETRY_DELAY_MS,
+  ZALO_REDIS_CHANNEL_SESSION_DISABLED,
   ZALO_REDIS_CHANNEL_SESSION_RENEWED,
 } from 'src/modules/zalo/constants/zalo.constant';
 import {
@@ -34,7 +31,7 @@ import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.s
 import { ZaloSessionRepository } from 'src/modules/zalo/repositories/zalo-session.repository';
 
 @Injectable()
-export class ZaloService implements OnModuleInit, OnModuleDestroy {
+export class ZaloService implements OnModuleDestroy {
   private readonly logger = new Logger(ZaloService.name);
   /** key = shopId (1 Zalo account / shop) */
   private readonly apis = new Map<string, API>();
@@ -46,29 +43,11 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     private readonly zaloSessionError: ZaloSessionError,
     private readonly redisService: RedisService,
     private readonly shopService: ShopService,
+    private readonly shopError: ShopError,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    await this.backfillMissingShopId();
-  }
 
   onModuleDestroy(): void {
     this.clearAllApis();
-  }
-
-  private async backfillMissingShopId(): Promise<void> {
-    const defaultShopId = await this.shopService.getDefaultShopId();
-    const result = await this.zaloSessionRepository.updateMany(
-      {
-        $or: [{ shopId: { $exists: false } }, { shopId: null }, { shopId: '' }],
-      },
-      { shopId: defaultShopId },
-    );
-    if (result.modifiedCount > 0) {
-      this.logger.log(
-        `Backfilled shopId=${defaultShopId} for ${result.modifiedCount} Zalo session(s)`,
-      );
-    }
   }
 
   isConnected(shopId?: string): boolean {
@@ -108,11 +87,12 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
   }
 
   async resolveShopId(shopId?: string): Promise<string> {
-    if (shopId?.trim()) {
-      await this.shopService.assertActiveShop(shopId.trim());
-      return shopId.trim();
+    const resolved = shopId?.trim();
+    if (!resolved) {
+      this.shopError.throwShopIdRequired();
     }
-    return this.shopService.getDefaultShopId();
+    await this.shopService.assertActiveShop(resolved);
+    return resolved;
   }
 
   async upsertSession(
@@ -148,7 +128,7 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     return this.mapGet(session);
   }
 
-  async getSession(shopId?: string): Promise<ZaloSessionGetResponseDto | null> {
+  async getSession(shopId: string): Promise<ZaloSessionGetResponseDto | null> {
     const resolvedShopId = await this.resolveShopId(shopId);
     const session = await this.zaloSessionRepository.findOne({
       shopId: resolvedShopId,
@@ -183,6 +163,50 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     shopId: string,
   ): Promise<void> {
     await this.zaloSessionRepository.updateMany({ shopId }, { status });
+  }
+
+  /**
+   * Disable Zalo session so the worker stops auto-replying.
+   * Credentials are kept; reconnect via QR to re-enable.
+   */
+  async disconnectSession(
+    shopId: string,
+  ): Promise<ZaloSessionGetResponseDto> {
+    const resolvedShopId = await this.resolveShopId(shopId);
+    const session = await this.zaloSessionRepository.findOne({
+      shopId: resolvedShopId,
+    });
+
+    if (!session) {
+      this.zaloSessionError.throwSessionNotFound();
+    }
+
+    if (session.status !== ENUM_ZALO_SESSION_STATUS.DISABLED) {
+      await this.zaloSessionRepository.updateMany(
+        { shopId: resolvedShopId },
+        { status: ENUM_ZALO_SESSION_STATUS.DISABLED },
+      );
+    }
+
+    this.clearApi(resolvedShopId);
+    await this.notifySessionDisabled(resolvedShopId);
+
+    const updated = await this.getSession(resolvedShopId);
+    return updated!;
+  }
+
+  async notifySessionDisabled(shopId: string): Promise<void> {
+    try {
+      await this.redisService.publish(ZALO_REDIS_CHANNEL_SESSION_DISABLED, {
+        shopId,
+        at: new Date().toISOString(),
+      });
+      this.logger.log(`Published session disabled shopId=${shopId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish session disabled: ${String(error)}`,
+      );
+    }
   }
 
   async loadCredentials(shopId: string): Promise<IZaloSessionCredentials> {
@@ -234,15 +258,15 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
 
   async loginQr(
     onEvent: (event: IZaloQrEvent) => void,
-    options?: { shopId?: string; proxy?: string },
+    options: { shopId: string; proxy?: string },
   ): Promise<{
     api: API;
     credentials: IZaloSessionCredentials;
     shopId: string;
   }> {
-    const shopId = await this.resolveShopId(options?.shopId);
+    const shopId = await this.resolveShopId(options.shopId);
     const proxy =
-      options?.proxy?.trim() ||
+      options.proxy?.trim() ||
       this.configService.get<string>('zalo.proxy') ||
       undefined;
 
