@@ -1,0 +1,256 @@
+---
+description: Quy tắc kiến trúc và coding convention cho NCG Backend (NestJS)
+alwaysApply: true
+---
+
+# NCG Backend — Coding Conventions
+
+Khi viết/sửa code trong `src/`, **bắt buộc** tuân thủ các quy tắc sau. Tham chiếu module hiện có (vd: `enrollment`, `class`) làm template.
+
+## 1. Vị trí enum, const, interface
+
+Đặt đúng thư mục theo vai trò — **không** gom tất cả vào một file, **không** để enum/const/interface trong `errors/`, `services/`, `controllers/`.
+
+| Loại                                  | Thư mục                       | Ví dụ                                                      |
+| ------------------------------------- | ----------------------------- | ---------------------------------------------------------- |
+| Enum nghiệp vụ                        | `enums/*.enum.ts`             | `ENUM_CLASS_STATUS`, `ENUM_CLASS_PUBLISH_MISSING_FIELD`    |
+| Const tĩnh (list default, map config) | `constants/*.constant.ts`     | `CLASS_PUBLISH_MISSING_FIELDS`, `CLASS_STATUS_TRANSITION`  |
+| Interface/type                        | `interfaces/*.interface.ts`   | `IEnrollmentService`, `IFormattedStateMachineError`        |
+| Status code enum                      | `enums/*.status-code.enum.ts` | `enrollment.status-code.enum.ts`                           |
+| Custom validation (class-validator)   | `validations/*.validation.ts` | `enrollment.class-or-coach.validation.ts`                  |
+| Error/validation logic tái sử dụng    | `errors/*.error.ts`           | `enrollment.eligibility.error.ts`, `class.status.error.ts` |
+
+### Quy tắc chọn kiểu dữ liệu
+
+- **Enum** — tập giá trị cố định, dùng lại nhiều nơi (status, missing field code, action).
+- **Const** — mảng derived từ enum (`Object.values(...)`), map config, state machine transitions.
+- **Interface** — shape object trả về / input phức tạp; đặt file theo domain con nếu cần (vd: `class.status.interface.ts`).
+- **Type alias** — chỉ dùng khi là alias mỏng; ưu tiên enum nếu là tập giá trị cố định.
+
+### Đặt tên file theo domain con
+
+Khi logic thuộc một nhánh nghiệp vụ, tách file theo prefix domain — không nhồi vào file gốc nếu đã có nhiều concern:
+
+```
+enums/class.enum.ts
+constants/class.status.constant.ts
+interfaces/class.status.interface.ts
+errors/class.status.error.ts
+```
+
+### Phân tách trách nhiệm file (template `class.status`)
+
+```typescript
+// enums/class.enum.ts — giá trị cố định
+export enum ENUM_CLASS_PUBLISH_MISSING_FIELD {
+    ADDRESS = 'address',
+    LOCATION = 'location',
+    SCHEDULE = 'schedule',
+    TUITION = 'tuition',
+}
+
+// constants/class.status.constant.ts — derived values & map i18n key
+export const CLASS_PUBLISH_MISSING_FIELDS = Object.values(ENUM_CLASS_PUBLISH_MISSING_FIELD);
+export const CLASS_PUBLISH_MISSING_FIELD_MESSAGE: Record<ENUM_CLASS_PUBLISH_MISSING_FIELD, string> = { ... };
+
+// interfaces/class.status.interface.ts — shape response/error
+export interface IFormattedStateMachineError extends StateMachineError { ... }
+
+// errors/class.status.error.ts — CHỈ class xử lý validate & format lỗi
+@Injectable()
+export class ClassStatusError {
+    static getPublishMissingFields(classDoc) { ... }      // pure validate, gọi được từ constants
+    static buildPublishMissingError(missing) { ... }      // build StateMachineError
+    formatMachineError(error, language?) { ... }          // format i18n, cần MessageService
+}
+```
+
+### Hướng import
+
+- `constants/` → import từ `enums/`, `interfaces/`; **không** import `services/`.
+- `errors/` → import từ `enums/`, `constants/`, `interfaces/`; **không** import service module khác.
+- `constants/` gọi validate pure → dùng **static method** của error class, không import function rời từ `errors/`.
+
+```typescript
+// ✅ constants/class.validate.constant.ts
+condition: () => {
+  const missing = ClassStatusError.getPublishMissingFields(classDoc);
+  if (!missing.length) return undefined;
+  return ClassStatusError.buildPublishMissingError(missing);
+};
+
+// ❌ Không export type/const/interface từ errors/*.error.ts
+// ❌ Không đặt getPublishMissingFields() dạng function rời trong errors file
+```
+
+## 2. Service không import Service — Controller điều phối
+
+- **Cấm** service của module A inject/import service của module B.
+- **Controller** được inject nhiều service và chứa phần lớn logic điều phối, validate, throw lỗi.
+- Service chỉ làm: CRUD, aggregate, transform data, logic thuần DB/domain không cần service khác.
+
+```typescript
+// ✅ Controller — inject nhiều service, validate & orchestrate
+async create(@Body() dto: EnrollmentCreateRequestDto) {
+    const classDoc = await this.enrollmentService.resolveClassForEnrollment(...);
+    await this.enrollmentEligibilityError.validateEnrollmentEligibility(
+        dto, classDoc, this.studentInCenterService, this.enrollmentService, session
+    );
+    // ...
+}
+
+// ✅ Error class — nhận service qua param, không inject service khác
+async validateEnrollmentEligibility(
+    dto, classDoc,
+    studentInCenterService: StudentInCenterService,
+    enrollmentService: EnrollmentService,
+    session?: ClientSession
+) { ... }
+
+// ❌ Service inject service module khác
+constructor(private readonly billService: BillService) {}
+```
+
+## 3. Error class — pattern chuẩn
+
+File `errors/<domain>.error.ts` chỉ chứa `@Injectable()` class. Tách rõ 2 loại method:
+
+| Loại method | Khi nào dùng                                                           | Ví dụ                                                     |
+| ----------- | ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| `static`    | Validate/build thuần, không cần DI; gọi từ `constants/`, state machine | `getPublishMissingFields()`, `buildPublishMissingError()` |
+| Instance    | Cần `MessageService` hoặc throw trực tiếp                              | `formatMachineError()`, `validateEnrollmentEligibility()` |
+
+- Logic validate **throw** hoặc **return error object** → đặt trong error class, không trong controller/service.
+- Controller gọi error class → nhận kết quả → `throw new BadRequestException(...)`.
+- Error class **không** inject service module khác; service cần thiết truyền qua **param** (xem `enrollment.eligibility.error.ts`).
+
+### Lỗi nhiều field — hiển thị rõ từng mục thiếu
+
+Không dùng một message chung khi có nhiều điều kiện validate. Trả structured error:
+
+```typescript
+// i18n — message tổng + từng field
+// class.json: "missingDetail": "Vui lòng bổ sung: {details}"
+// class.json: "missingField": { "address": "địa chỉ (...)", ... }
+
+// Controller
+const formatted = this.classStatusError.formatMachineError(
+  error,
+  request.__language,
+);
+throw new BadRequestException({
+  statusCode: formatted.httpStatus,
+  message: formatted.message, // i18n key, filter tự dịch + interpolate {details}
+  data: formatted.data, // { missing: ['address', 'schedule'], errors: [{ field, message }] }
+  _metadata: formatted._metadata, // messageProperties cho interpolation
+});
+```
+
+Response mẫu:
+
+```json
+{
+  "statusCode": 400,
+  "message": "Vui lòng bổ sung: địa chỉ (...), lịch học",
+  "data": {
+    "missing": ["address", "schedule"],
+    "errors": [
+      { "field": "address", "message": "địa chỉ (...)" },
+      { "field": "schedule", "message": "lịch học" }
+    ]
+  }
+}
+```
+
+- `data.missing` — mã field cho FE highlight form.
+- `data.errors` — message đã dịch theo ngôn ngữ request.
+- Map field → i18n key đặt trong `constants/`, không hardcode string trong error class.
+
+## 4. Một module — một service
+
+- Mỗi module chỉ có **một** file `services/<module>.service.ts`.
+- **Không** tạo thêm service file mới trong cùng module (vd: `enrollment-create.service.ts`).
+- Logic phức tạp: đặt ở controller hoặc method private trong service hiện có.
+
+## 5. Không tạo helper file riêng
+
+- **Không** tạo `helpers/`, `utils/` trong module.
+- **Không** tạo các file helper, utils trong code.
+- Logic dùng lại: static/instance method trong error class, method private trong service, hoặc entry trong `constants/`.
+- Khi service method bắt buộc cần service khác → controller truyền xuống qua **param**; vẫn ưu tiên logic ở controller.
+
+## 6. Format API & template code
+
+Luôn bám theo code hiện có trong cùng module:
+
+### Controller
+
+```typescript
+@Controller({ version: '1', path: '/enrollments' })
+@EncryptionController()
+export class EnrollmentManagerController {
+  @Response('enrollment.create') // key i18n success message
+  @HttpCode(HttpStatus.CREATED)
+  @PolicyCenterProtected()
+  @PolicyPermission(MODULE_KEY.enrollment)
+  @UseDecryption(true)
+  @PolicyVerifyProtected()
+  @AuthJwtAccessProtected()
+  @UseRequestContext()
+  @Post('/')
+  async create(
+    @Body() dto: EnrollmentCreateRequestDto,
+  ): Promise<IResponse<EnrollmentGetSerialization>> {
+    // validate → call service → return { data: plainToInstance(...) }
+  }
+}
+```
+
+### Throw error (i18n key)
+
+```typescript
+throw new BadRequestException({
+  statusCode: HttpStatus.BAD_REQUEST,
+  message: 'enrollment.error.enrollmentNotFound', // key trong src/languages/{vi,en}/<module>.json
+});
+```
+
+### Request DTO
+
+- File: `dtos/request/<module>.<action>.request.dto.ts`
+- Dùng `class-validator` + `class-transformer`
+- Custom rule → `validations/` hoặc decorator trong `src/common/request/validations/`
+
+### Response DTO
+
+- File: `dtos/response/<module>.<action>.response.dto.ts`
+- Dùng `plainToInstance(DtoClass, data)` khi trả về
+
+### i18n
+
+- Thêm key vào **cả** `src/languages/vi/<module>.json` và `src/languages/en/<module>.json`
+- Success: `@Response('<module>.<action>')` → key top-level (vd: `"create"`)
+- Error: `message: '<module>.error.<code>'` → key trong object `"error"`
+- Lỗi nhiều field: nhóm key theo domain (`error.status.missingField.*`), dùng `{details}` interpolation cho message tổng
+
+### Module registration
+
+```typescript
+@Module({
+    providers: [EnrollmentService, EnrollmentEligibilityError, ClassStatusError, ...Constraint],
+    exports: [EnrollmentService, EnrollmentEligibilityError, ClassStatusError],
+    imports: [EnrollmentRepositoryModule],
+})
+```
+
+## Checklist trước khi hoàn thành
+
+- [ ] Enum/const/interface đúng thư mục; file `errors/` chỉ chứa class, không chứa type/const rời
+- [ ] Const derived từ enum (`Object.values`), map i18n key nằm trong `constants/`
+- [ ] Validate pure dùng static method error class; format i18n dùng instance method
+- [ ] Lỗi validate nhiều điều kiện có `data.missing` + `data.errors`, không chỉ message chung
+- [ ] Service không import service module khác
+- [ ] Logic validate/orchestrate ở controller
+- [ ] Không tạo service/helper file mới trong module
+- [ ] DTO, decorator, i18n key (vi + en), response format giống module lân cận
+- [ ] Tham chiếu `docs/api-rule.md` khi viết tài liệu API
