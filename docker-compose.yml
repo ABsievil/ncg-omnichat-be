@@ -12,7 +12,7 @@ services:
     env_file:
       - .env
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: ${PORT:-8090}
     ports:
       - '${PORT:-8090}:${PORT:-8090}'
@@ -35,7 +35,7 @@ services:
     env_file:
       - .env
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
     depends_on:
       - mongodb
       - redis
