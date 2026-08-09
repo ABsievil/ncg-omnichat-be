@@ -8,6 +8,7 @@ import {
   Sse,
 } from '@nestjs/common';
 import { Observable, Subscriber } from 'rxjs';
+import { SkipRequestTimeout } from 'src/common/request/decorators/request.decorator';
 import { Response } from 'src/common/response/decorators/response.decorator';
 import { IResponse } from 'src/common/response/interfaces/response.interface';
 import { ZaloLoginQrRequestDto } from 'src/modules/zalo/dtos/request/zalo.login-qr.request.dto';
@@ -62,6 +63,7 @@ export class ZaloAdminController {
    * Events: qr | scanned | declined | expired | login_success | error
    * (SSE không dùng envelope IResponse)
    */
+  @SkipRequestTimeout()
   @Sse('login-qr')
   loginQr(
     @Query() query: ZaloLoginQrRequestDto,
