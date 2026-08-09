@@ -1,12 +1,16 @@
-import { ClientSession, Document, PopulateOptions } from 'mongoose';
+import {
+    ClientSession,
+    HydratedDocument,
+    PopulateOptions,
+} from 'mongoose';
 import { IPaginationOrder } from 'src/common/pagination/interfaces/pagination.interface';
 
 export interface IDatabaseQueryContainOptions {
     fullWord: boolean;
 }
 
-/** Entities use string UUID `_id` (see DatabaseEntityBase), not ObjectId. */
-export type IDatabaseDocument<T> = Omit<Document, '_id'> & T;
+/** Hydrated mongoose doc; `_id` follows entity (string UUID in this project). */
+export type IDatabaseDocument<T> = HydratedDocument<T>;
 
 // Find
 export interface IDatabaseOptions {

@@ -449,7 +449,7 @@ export abstract class DatabaseRepositoryBase<
         repository: EntityDocument,
         options?: IDatabaseSaveOptions
     ): Promise<EntityDocument> {
-        return repository.save(options);
+        return repository.save(options) as Promise<EntityDocument>;
     }
 
     async join<T = any>(
@@ -515,7 +515,7 @@ export abstract class DatabaseRepositoryBase<
         repository.deleted = false;
         repository.deletedBy = undefined;
 
-        return repository.save(options);
+        return repository.save(options) as Promise<EntityDocument>;
     }
 
     // Bulk
