@@ -1,8 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { v4 as uuidV4 } from 'uuid';
-import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.connection.constant';
 import {
   SHOP_DEFAULT_CODE,
   SHOP_DEFAULT_NAME,
@@ -13,14 +10,14 @@ import { ShopGetResponseDto } from 'src/modules/shop/dtos/response/shop.get.resp
 import { ShopDoc, ShopEntity } from 'src/modules/shop/entities/shop.entity';
 import { ENUM_SHOP_STATUS } from 'src/modules/shop/enums/shop.enum';
 import { ShopError } from 'src/modules/shop/errors/shop.error';
+import { ShopRepository } from 'src/modules/shop/repositories/shop.repository';
 
 @Injectable()
 export class ShopService implements OnModuleInit {
   private readonly logger = new Logger(ShopService.name);
 
   constructor(
-    @InjectModel(ShopEntity.name, DATABASE_CONNECTION_NAME)
-    private readonly shopModel: Model<ShopEntity>,
+    private readonly shopRepository: ShopRepository,
     private readonly shopError: ShopError,
   ) {}
 
@@ -29,20 +26,20 @@ export class ShopService implements OnModuleInit {
   }
 
   async ensureDefaultShop(): Promise<ShopDoc> {
-    const existing = await this.shopModel
-      .findOne({ code: SHOP_DEFAULT_CODE, deleted: false })
-      .exec();
+    const existing = await this.shopRepository.findOne({
+      code: SHOP_DEFAULT_CODE,
+    });
     if (existing) {
       return existing;
     }
 
-    const created = await this.shopModel.create({
+    const created = await this.shopRepository.create({
       code: SHOP_DEFAULT_CODE,
       name: SHOP_DEFAULT_NAME,
       description: 'Auto-created default shop',
       status: ENUM_SHOP_STATUS.ACTIVE,
       chatbotKey: 'shared',
-    });
+    } as ShopEntity);
     this.logger.log(`Created default shop id=${created._id}`);
     return created;
   }
@@ -54,13 +51,13 @@ export class ShopService implements OnModuleInit {
 
   async create(dto: ShopCreateRequestDto): Promise<ShopGetResponseDto> {
     const code = await this.generateUniqueCode();
-    const shop = await this.shopModel.create({
+    const shop = await this.shopRepository.create({
       code,
       name: dto.name.trim(),
       description: dto.description?.trim() || null,
       status: dto.status ?? ENUM_SHOP_STATUS.ACTIVE,
       chatbotKey: 'shared',
-    });
+    } as ShopEntity);
 
     return this.mapGet(shop);
   }
@@ -69,7 +66,7 @@ export class ShopService implements OnModuleInit {
   private async generateUniqueCode(): Promise<string> {
     for (let i = 0; i < 8; i++) {
       const code = `shop_${uuidV4().replace(/-/g, '').slice(0, 10)}`;
-      const exists = await this.shopModel.exists({ code, deleted: false }).exec();
+      const exists = await this.shopRepository.exists({ code });
       if (!exists) {
         return code;
       }
@@ -91,7 +88,7 @@ export class ShopService implements OnModuleInit {
     if (dto.status !== undefined) {
       shop.status = dto.status;
     }
-    await shop.save();
+    await this.shopRepository.save(shop);
     return this.mapGet(shop);
   }
 
@@ -100,9 +97,9 @@ export class ShopService implements OnModuleInit {
   }
 
   async getByCode(code: string): Promise<ShopGetResponseDto> {
-    const shop = await this.shopModel
-      .findOne({ code: code.trim().toLowerCase(), deleted: false })
-      .exec();
+    const shop = await this.shopRepository.findOne({
+      code: code.trim().toLowerCase(),
+    });
     if (!shop) {
       this.shopError.throwNotFound();
     }
@@ -110,10 +107,10 @@ export class ShopService implements OnModuleInit {
   }
 
   async list(): Promise<ShopGetResponseDto[]> {
-    const shops = await this.shopModel
-      .find({ deleted: false })
-      .sort({ createdAt: 1 })
-      .exec();
+    const shops = await this.shopRepository.findAll(
+      {},
+      { order: { createdAt: 1 } },
+    );
     return shops.map(shop => this.mapGet(shop));
   }
 
@@ -128,9 +125,7 @@ export class ShopService implements OnModuleInit {
     if (shop.code === SHOP_DEFAULT_CODE) {
       this.shopError.throwCannotDeleteDefault();
     }
-    shop.deleted = true;
-    shop.deletedAt = new Date();
-    await shop.save();
+    await this.shopRepository.softDelete({ _id: shopId });
   }
 
   mapGet(shop: ShopDoc | ShopEntity): ShopGetResponseDto {
@@ -169,9 +164,7 @@ export class ShopService implements OnModuleInit {
   }
 
   private async findDocById(shopId: string): Promise<ShopDoc> {
-    const shop = await this.shopModel
-      .findOne({ _id: shopId, deleted: false })
-      .exec();
+    const shop = await this.shopRepository.findOneById(shopId);
     if (!shop) {
       this.shopError.throwNotFound();
     }

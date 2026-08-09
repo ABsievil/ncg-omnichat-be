@@ -1,4 +1,4 @@
-import { Inject } from '@nestjs/common';
+import { Inject, Optional } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import {
     BulkWriteResult,
@@ -51,7 +51,9 @@ export abstract class DatabaseRepositoryBase<
     protected readonly _repository: Model<Entity>;
     readonly _join?: PopulateOptions | (string | PopulateOptions)[];
 
-    @Inject(REQUEST) public readonly _request: IRequestApp;
+    @Optional()
+    @Inject(REQUEST)
+    public readonly _request: IRequestApp;
 
     constructor(
         repository: Model<Entity>,

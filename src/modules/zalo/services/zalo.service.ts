@@ -5,10 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { ThreadType, Zalo, type API } from 'zca-js';
-import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.connection.constant';
 import { HelperEncryptionService } from 'src/common/helper/services/helper.encryption.service';
 import { RedisService } from 'src/common/redis/services/redis.service';
 import { ShopService } from 'src/modules/shop/services/shop.service';
@@ -34,6 +31,7 @@ import {
 } from 'src/modules/zalo/interfaces/zalo.interface';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
 import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.dto';
+import { ZaloSessionRepository } from 'src/modules/zalo/repositories/zalo-session.repository';
 
 @Injectable()
 export class ZaloService implements OnModuleInit, OnModuleDestroy {
@@ -42,8 +40,7 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
   private readonly apis = new Map<string, API>();
 
   constructor(
-    @InjectModel(ZaloSessionEntity.name, DATABASE_CONNECTION_NAME)
-    private readonly sessionModel: Model<ZaloSessionEntity>,
+    private readonly zaloSessionRepository: ZaloSessionRepository,
     private readonly configService: ConfigService,
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly zaloSessionError: ZaloSessionError,
@@ -61,15 +58,12 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
 
   private async backfillMissingShopId(): Promise<void> {
     const defaultShopId = await this.shopService.getDefaultShopId();
-    const result = await this.sessionModel
-      .updateMany(
-        {
-          deleted: false,
-          $or: [{ shopId: { $exists: false } }, { shopId: null }, { shopId: '' }],
-        },
-        { $set: { shopId: defaultShopId } },
-      )
-      .exec();
+    const result = await this.zaloSessionRepository.updateMany(
+      {
+        $or: [{ shopId: { $exists: false } }, { shopId: null }, { shopId: '' }],
+      },
+      { shopId: defaultShopId },
+    );
     if (result.modifiedCount > 0) {
       this.logger.log(
         `Backfilled shopId=${defaultShopId} for ${result.modifiedCount} Zalo session(s)`,
@@ -131,59 +125,55 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<string>('zalo.proxy') ||
       null;
 
-    const session = await this.sessionModel
-      .findOneAndUpdate(
-        { shopId, deleted: false },
-        {
-          $set: {
-            shopId,
-            cookieEncrypted,
-            cookieIv,
-            imei: dto.imei,
-            userAgent: dto.userAgent,
-            proxy,
-            status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
-            lastLoginAt: new Date(),
-            deleted: false,
-          },
-          $unset: { accountLabel: 1 },
+    const session = await this.zaloSessionRepository.upsert(
+      { shopId },
+      {
+        $set: {
+          shopId,
+          cookieEncrypted,
+          cookieIv,
+          imei: dto.imei,
+          userAgent: dto.userAgent,
+          proxy,
+          status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
+          lastLoginAt: new Date(),
+          deleted: false,
         },
-        { upsert: true, new: true },
-      )
-      .exec();
+        $unset: { accountLabel: 1 },
+      },
+      undefined,
+      { upsert: true },
+    );
 
     return this.mapGet(session);
   }
 
   async getSession(shopId?: string): Promise<ZaloSessionGetResponseDto | null> {
     const resolvedShopId = await this.resolveShopId(shopId);
-    const session = await this.sessionModel
-      .findOne({ shopId: resolvedShopId, deleted: false })
-      .exec();
+    const session = await this.zaloSessionRepository.findOne({
+      shopId: resolvedShopId,
+    });
     return session ? this.mapGet(session) : null;
   }
 
   async listSessions(shopId?: string): Promise<ZaloSessionGetResponseDto[]> {
-    const filter: Record<string, unknown> = { deleted: false };
+    const filter: Record<string, unknown> = {};
     if (shopId?.trim()) {
       filter.shopId = await this.resolveShopId(shopId);
     }
-    const sessions = await this.sessionModel
-      .find(filter)
-      .sort({ updatedAt: -1 })
-      .exec();
+    const sessions = await this.zaloSessionRepository.findAll(filter, {
+      order: { updatedAt: -1 },
+    });
     return sessions.map(session => this.mapGet(session));
   }
 
   async listActiveShopIds(): Promise<string[]> {
-    const sessions = await this.sessionModel
-      .find({
-        deleted: false,
+    const sessions = await this.zaloSessionRepository.findAll(
+      {
         status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
-      })
-      .select('shopId')
-      .lean()
-      .exec();
+      },
+      { select: { shopId: 1 } },
+    );
 
     return sessions.map(session => String(session.shopId));
   }
@@ -192,16 +182,14 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     status: ENUM_ZALO_SESSION_STATUS,
     shopId: string,
   ): Promise<void> {
-    await this.sessionModel
-      .updateOne({ shopId, deleted: false }, { $set: { status } })
-      .exec();
+    await this.zaloSessionRepository.updateMany({ shopId }, { status });
   }
 
   async loadCredentials(shopId: string): Promise<IZaloSessionCredentials> {
-    const session = await this.sessionModel
-      .findOne({ shopId, deleted: false })
-      .select('+cookieEncrypted +cookieIv +imei +userAgent')
-      .exec();
+    const session = await this.zaloSessionRepository.findOne(
+      { shopId },
+      { select: '+cookieEncrypted +cookieIv +imei +userAgent' },
+    );
 
     ZaloSessionError.assertActive(session);
 
@@ -229,18 +217,14 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     try {
       const ownId =
         typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
-      await this.sessionModel
-        .updateOne(
-          { shopId, deleted: false },
-          {
-            $set: {
-              status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
-              lastLoginAt: new Date(),
-              ...(ownId ? { ownId } : {}),
-            },
-          },
-        )
-        .exec();
+      await this.zaloSessionRepository.updateMany(
+        { shopId },
+        {
+          status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
+          lastLoginAt: new Date(),
+          ...(ownId ? { ownId } : {}),
+        },
+      );
     } catch (error) {
       this.logger.warn(`Failed to refresh session metadata: ${String(error)}`);
     }
@@ -262,25 +246,24 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<string>('zalo.proxy') ||
       undefined;
 
-    await this.sessionModel
-      .findOneAndUpdate(
-        { shopId, deleted: false },
-        {
-          $set: {
-            shopId,
-            status: ENUM_ZALO_SESSION_STATUS.PENDING_QR,
-            deleted: false,
-          },
-          $setOnInsert: {
-            cookieEncrypted: '[]',
-            imei: '',
-            userAgent: '',
-          },
-          $unset: { accountLabel: 1 },
+    await this.zaloSessionRepository.upsert(
+      { shopId },
+      {
+        $set: {
+          shopId,
+          status: ENUM_ZALO_SESSION_STATUS.PENDING_QR,
+          deleted: false,
         },
-        { upsert: true },
-      )
-      .exec();
+        $setOnInsert: {
+          cookieEncrypted: '[]',
+          imei: '',
+          userAgent: '',
+        },
+        $unset: { accountLabel: 1 },
+      },
+      undefined,
+      { upsert: true },
+    );
 
     const zalo = new Zalo({
       selfListen: true,
@@ -352,13 +335,12 @@ export class ZaloService implements OnModuleInit, OnModuleDestroy {
     const ownId =
       typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
     if (ownId) {
-      await this.sessionModel
-        .updateOne({ shopId, deleted: false }, { $set: { ownId } })
-        .exec();
+      await this.zaloSessionRepository.updateMany({ shopId }, { ownId });
     } else {
-      await this.sessionModel
-        .updateOne({ shopId, deleted: false }, { $unset: { ownId: 1 } })
-        .exec();
+      await this.zaloSessionRepository.updateManyRaw(
+        { shopId },
+        { $unset: { ownId: 1 } },
+      );
     }
 
     await this.notifySessionRenewed(shopId);

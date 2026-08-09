@@ -6,6 +6,7 @@ import {
   ShopSchema,
 } from 'src/modules/shop/entities/shop.entity';
 import { ShopError } from 'src/modules/shop/errors/shop.error';
+import { ShopRepository } from 'src/modules/shop/repositories/shop.repository';
 import { ShopService } from 'src/modules/shop/services/shop.service';
 
 @Module({
@@ -15,7 +16,7 @@ import { ShopService } from 'src/modules/shop/services/shop.service';
       DATABASE_CONNECTION_NAME,
     ),
   ],
-  providers: [ShopService, ShopError],
-  exports: [ShopService, ShopError, MongooseModule],
+  providers: [ShopRepository, ShopService, ShopError],
+  exports: [ShopService, ShopRepository, ShopError, MongooseModule],
 })
 export class ShopModule {}

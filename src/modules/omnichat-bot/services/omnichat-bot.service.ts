@@ -1,7 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { DATABASE_CONNECTION_NAME } from 'src/common/database/constants/database.connection.constant';
 import { AiAgentService } from 'src/modules/ai-agent/services/ai-agent.service';
 import {
   ZALO_BLOCKED_MESSAGE,
@@ -9,18 +6,16 @@ import {
 } from 'src/modules/zalo/constants/zalo.constant';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 import { OMNICHAT_BOT_HISTORY_LIMIT } from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
-import {
-  ZaloChatHistoryEntity,
-} from 'src/modules/omnichat-bot/entities/zalo-chat-history.entity';
+import { ZaloChatHistoryEntity } from 'src/modules/omnichat-bot/entities/zalo-chat-history.entity';
 import { ENUM_ZALO_CHAT_ROLE } from 'src/modules/omnichat-bot/enums/omnichat-bot.enum';
+import { ZaloChatHistoryRepository } from 'src/modules/omnichat-bot/repositories/zalo-chat-history.repository';
 
 @Injectable()
 export class OmnichatBotService {
   private readonly logger = new Logger(OmnichatBotService.name);
 
   constructor(
-    @InjectModel(ZaloChatHistoryEntity.name, DATABASE_CONNECTION_NAME)
-    private readonly historyModel: Model<ZaloChatHistoryEntity>,
+    private readonly zaloChatHistoryRepository: ZaloChatHistoryRepository,
     private readonly zaloService: ZaloService,
     private readonly aiAgentService: AiAgentService,
   ) {}
@@ -96,12 +91,13 @@ export class OmnichatBotService {
   }
 
   private async getHistory(userId: string) {
-    const rows = await this.historyModel
-      .find({ userId, deleted: false })
-      .sort({ timestamp: -1 })
-      .limit(OMNICHAT_BOT_HISTORY_LIMIT)
-      .lean()
-      .exec();
+    const rows = await this.zaloChatHistoryRepository.findAll(
+      { userId },
+      {
+        order: { timestamp: -1 },
+        paging: { limit: OMNICHAT_BOT_HISTORY_LIMIT },
+      },
+    );
 
     return rows
       .reverse()
@@ -118,23 +114,21 @@ export class OmnichatBotService {
     assistantContent: string;
   }): Promise<void> {
     const now = new Date();
-    await this.historyModel.insertMany([
+    await this.zaloChatHistoryRepository.createMany([
       {
         userId: input.userId,
         threadId: input.threadId,
         role: ENUM_ZALO_CHAT_ROLE.USER,
         content: input.userContent,
         timestamp: now,
-        deleted: false,
-      },
+      } as ZaloChatHistoryEntity,
       {
         userId: input.userId,
         threadId: input.threadId,
         role: ENUM_ZALO_CHAT_ROLE.ASSISTANT,
         content: input.assistantContent,
         timestamp: new Date(now.getTime() + 1),
-        deleted: false,
-      },
+      } as ZaloChatHistoryEntity,
     ]);
   }
 }

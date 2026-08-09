@@ -7,6 +7,7 @@ import {
   ZaloSessionSchema,
 } from 'src/modules/zalo/entities/zalo-session.entity';
 import { ZaloSessionError } from 'src/modules/zalo/errors/zalo.session.error';
+import { ZaloSessionRepository } from 'src/modules/zalo/repositories/zalo-session.repository';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 
 @Module({
@@ -17,7 +18,13 @@ import { ZaloService } from 'src/modules/zalo/services/zalo.service';
       DATABASE_CONNECTION_NAME,
     ),
   ],
-  providers: [ZaloService, ZaloSessionError],
-  exports: [ZaloService, ZaloSessionError, MongooseModule, ShopModule],
+  providers: [ZaloSessionRepository, ZaloService, ZaloSessionError],
+  exports: [
+    ZaloService,
+    ZaloSessionRepository,
+    ZaloSessionError,
+    MongooseModule,
+    ShopModule,
+  ],
 })
 export class ZaloModule {}
