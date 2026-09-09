@@ -79,6 +79,13 @@ export class ShopService {
     return shops.map(shop => this.mapGet(shop));
   }
 
+  async listForTenant(shopId?: string): Promise<ShopGetResponseDto[]> {
+    if (!shopId) {
+      return this.list();
+    }
+    return [await this.getById(shopId)];
+  }
+
   async assertActiveShop(shopId: string): Promise<ShopDoc> {
     const shop = await this.findDocById(shopId);
     this.shopError.assertActive(shop.status);

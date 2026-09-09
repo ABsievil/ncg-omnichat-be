@@ -8,6 +8,7 @@
     "notFound": "Không tìm thấy cửa hàng",
     "codeExists": "Mã cửa hàng đã tồn tại",
     "disabled": "Cửa hàng đã bị vô hiệu hóa",
-    "shopIdRequired": "Thiếu shop id"
+    "shopIdRequired": "Thiếu shop id",
+    "alreadyHasShop": "Tài khoản đã có cửa hàng"
   }
 }

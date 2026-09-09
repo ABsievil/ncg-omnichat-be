@@ -36,6 +36,13 @@ export class ShopError {
     });
   }
 
+  throwAlreadyHasShop(): never {
+    throw new BadRequestException({
+      statusCode: ENUM_SHOP_STATUS_CODE.ALREADY_HAS_SHOP,
+      message: 'shop.error.alreadyHasShop',
+    });
+  }
+
   assertActive(status?: ENUM_SHOP_STATUS | null): void {
     if (status === ENUM_SHOP_STATUS.DISABLED) {
       this.throwDisabled();

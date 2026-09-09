@@ -7,6 +7,7 @@ import {
   type ThrottlerModuleOptions,
 } from '@nestjs/throttler';
 import { AppMiddlewareModule } from 'src/app/app.middleware.module';
+import { validateAppEnv } from 'src/app/dtos/app-env.dto';
 import { CommonModule } from 'src/common/common.module';
 import { MIDDLEWARE_CONFIG_PATH } from 'src/common/request/constants/middleware-config-path.constant';
 import configs from 'src/configs';
@@ -20,6 +21,7 @@ import { JwtAuthGuard } from 'src/modules/auth/guards/jwt.auth.guard';
     ConfigModule.forRoot({
       isGlobal: true,
       load: configs,
+      validate: validateAppEnv,
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],

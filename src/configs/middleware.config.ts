@@ -6,7 +6,11 @@ import {
 function parseCorsOrigin(
   raw: string | undefined,
 ): boolean | string | string[] {
+  const isProduction = process.env.NODE_ENV === 'production';
   if (raw === undefined || raw === '' || raw === '*') {
+    if (isProduction) {
+      throw new Error('CORS_ORIGIN must be a whitelist in production, not *');
+    }
     return true;
   }
   const trimmed = raw.trim();

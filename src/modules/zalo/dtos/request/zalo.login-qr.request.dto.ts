@@ -1,11 +1,14 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 export class ZaloLoginQrRequestDto {
-  @ApiProperty({ description: 'Shop id to bind the Zalo QR login session' })
+  @ApiPropertyOptional({
+    description:
+      'Shop id to bind the Zalo QR login. Owners omit this — JWT shop is used. Admin must pass it.',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  shopId!: string;
+  shopId?: string;
 
   @ApiPropertyOptional({
     description: 'HTTP proxy, e.g. http://user:pass@host:port',

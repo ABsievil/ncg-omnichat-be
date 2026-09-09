@@ -12,7 +12,10 @@ import {
 } from 'src/modules/zalo/mappers/zalo-group-address.mapper';
 import { buildGroupMentionReply } from 'src/modules/zalo/mappers/zalo-message.mapper';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
-import { OMNICHAT_BOT_HISTORY_LIMIT } from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
+import {
+  OMNICHAT_BOT_FALLBACK_MESSAGE,
+  OMNICHAT_BOT_HISTORY_LIMIT,
+} from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
 import { ZaloChatHistoryEntity } from 'src/modules/omnichat-bot/entities/zalo-chat-history.entity';
 import { ENUM_ZALO_CHAT_ROLE } from 'src/modules/omnichat-bot/enums/omnichat-bot.enum';
 import { ZaloChatHistoryRepository } from 'src/modules/omnichat-bot/repositories/zalo-chat-history.repository';
@@ -91,11 +94,11 @@ export class OmnichatBotService {
       return;
     }
 
-    const history = await this.getHistory(message.userId);
+    const history = await this.getHistory(shopId, message.userId);
     const userMessage = isGroup
       ? stripBotAddressFromContent(message.messageContent, botNames)
       : message.messageContent;
-    const reply = await this.aiAgentService.run({
+    let reply = await this.aiAgentService.run({
       userId: message.userId,
       message: userMessage,
       history,
@@ -104,8 +107,8 @@ export class OmnichatBotService {
     });
 
     if (!reply?.trim()) {
-      this.logger.warn(`Empty AI reply for user=${message.userId}`);
-      return;
+      this.logger.warn(`Empty AI reply for user=${message.userId} shop=${shopId}`);
+      reply = OMNICHAT_BOT_FALLBACK_MESSAGE;
     }
 
     await this.sendThreadReply({
@@ -116,6 +119,7 @@ export class OmnichatBotService {
     });
 
     await this.saveHistoryPair({
+      shopId,
       userId: message.userId,
       threadId: message.threadId,
       userContent: message.messageContent,
@@ -154,9 +158,9 @@ export class OmnichatBotService {
     });
   }
 
-  private async getHistory(userId: string) {
+  private async getHistory(shopId: string, userId: string) {
     const rows = await this.zaloChatHistoryRepository.findAll(
-      { userId },
+      { shopId, userId },
       {
         order: { timestamp: -1 },
         paging: { limit: OMNICHAT_BOT_HISTORY_LIMIT },
@@ -171,6 +175,7 @@ export class OmnichatBotService {
   }
 
   private async saveHistoryPair(input: {
+    shopId: string;
     userId: string;
     threadId: string;
     userContent: string;
@@ -180,6 +185,7 @@ export class OmnichatBotService {
     const now = new Date();
     await this.zaloChatHistoryRepository.createMany([
       {
+        shopId: input.shopId,
         userId: input.userId,
         threadId: input.threadId,
         role: ENUM_ZALO_CHAT_ROLE.USER,
@@ -188,6 +194,7 @@ export class OmnichatBotService {
         timestamp: now,
       } as ZaloChatHistoryEntity,
       {
+        shopId: input.shopId,
         userId: input.userId,
         threadId: input.threadId,
         role: ENUM_ZALO_CHAT_ROLE.ASSISTANT,

@@ -8,6 +8,7 @@
     "notFound": "Shop not found",
     "codeExists": "Shop code already exists",
     "disabled": "Shop is disabled",
-    "shopIdRequired": "Shop id is required"
+    "shopIdRequired": "Shop id is required",
+    "alreadyHasShop": "Account already has a shop"
   }
 }

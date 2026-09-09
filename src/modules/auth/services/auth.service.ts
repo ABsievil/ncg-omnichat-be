@@ -86,7 +86,7 @@ export class AuthService {
       passwordHash,
       displayName: dto.displayName,
       shopId: null,
-      role: ENUM_USER_ROLE.USER,
+      role: ENUM_USER_ROLE.OWNER,
       gender: ENUM_USER_GENDER.UNKNOWN,
       bio: '',
       statusText: '',
@@ -113,7 +113,7 @@ export class AuthService {
         phone,
         displayName: phone,
         shopId: null,
-        role: ENUM_USER_ROLE.USER,
+        role: ENUM_USER_ROLE.OWNER,
         gender: ENUM_USER_GENDER.UNKNOWN,
         bio: '',
         statusText: '',
@@ -226,8 +226,8 @@ export class AuthService {
   private async ensureUserShopAndRole(user: UserDoc): Promise<UserDoc> {
     let dirty = false;
 
-    if (!user.role) {
-      user.role = ENUM_USER_ROLE.USER;
+    if (!user.role || user.role === ENUM_USER_ROLE.USER) {
+      user.role = ENUM_USER_ROLE.OWNER;
       dirty = true;
     }
 
@@ -265,7 +265,7 @@ export class AuthService {
       userId: user._id,
       phone: user.phone,
       shopId: user.shopId ?? null,
-      role: user.role ?? ENUM_USER_ROLE.USER,
+      role: user.role ?? ENUM_USER_ROLE.OWNER,
       sessionId,
     });
 
@@ -296,9 +296,10 @@ export class AuthService {
     role: ENUM_USER_ROLE;
     sessionId: string;
   }) {
-    const secret =
-      this.configService.get<string>('helper.jwt.defaultSecretKey') ??
-      'omnichat-default-secret';
+    const secret = this.configService.get<string>('helper.jwt.defaultSecretKey');
+    if (!secret) {
+      throw new Error('HELPER_JWT_SECRET_KEY is not configured');
+    }
     const accessExpired =
       this.configService.get<string>('helper.jwt.defaultExpirationTime') ??
       '1h';

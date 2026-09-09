@@ -24,10 +24,17 @@ export class AppCustomLanguageMiddleware implements NestMiddleware {
       ];
 
     const headerLang = req.get(ErrorResponseHeader.Language);
-    const language =
-      headerLang && available.includes(headerLang)
-        ? headerLang
-        : defaultLanguage;
+    const acceptLang = req
+      .get('accept-language')
+      ?.split(',')[0]
+      ?.trim()
+      .split('-')[0]
+      ?.toLowerCase();
+    const requested =
+      (headerLang && available.includes(headerLang) && headerLang) ||
+      (acceptLang && available.includes(acceptLang) && acceptLang) ||
+      defaultLanguage;
+    const language = requested;
 
     req.__language = language;
     res.setHeader(ErrorResponseHeader.Language, language);

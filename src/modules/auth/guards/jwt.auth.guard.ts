@@ -41,9 +41,10 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const token = authHeader.slice(7);
-    const secret =
-      this.configService.get<string>('helper.jwt.defaultSecretKey') ??
-      'omnichat-default-secret';
+    const secret = this.configService.get<string>('helper.jwt.defaultSecretKey');
+    if (!secret) {
+      throw new UnauthorizedException('auth.error.invalidToken');
+    }
 
     const valid = this.helperEncryptionService.jwtVerify(token, {
       secretKey: secret,

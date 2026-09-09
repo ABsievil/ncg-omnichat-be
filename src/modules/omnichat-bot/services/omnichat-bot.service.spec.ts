@@ -1,0 +1,103 @@
+import { ENUM_ZALO_THREAD_TYPE } from 'src/modules/zalo/enums/zalo.enum';
+import { IZaloMessage } from 'src/modules/zalo/interfaces/zalo.interface';
+import { OMNICHAT_BOT_FALLBACK_MESSAGE } from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
+import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-bot.service';
+
+jest.mock('src/modules/ai-agent/services/ai-agent.service', () => ({
+  AiAgentService: class AiAgentService {},
+}));
+jest.mock('src/modules/zalo/services/zalo.service', () => ({
+  ZaloService: class ZaloService {},
+}));
+jest.mock(
+  'src/modules/omnichat-bot/repositories/zalo-chat-history.repository',
+  () => ({
+    ZaloChatHistoryRepository: class ZaloChatHistoryRepository {},
+  }),
+);
+jest.mock('src/modules/omnichat-bot/entities/zalo-chat-history.entity', () => ({
+  ZaloChatHistoryEntity: class ZaloChatHistoryEntity {},
+}));
+
+jest.mock('src/modules/ai-agent/services/ai-agent.service', () => ({
+  AiAgentService: class AiAgentService {},
+}));
+
+jest.mock('src/modules/zalo/services/zalo.service', () => ({
+  ZaloService: class ZaloService {},
+}));
+
+describe('OmnichatBotService', () => {
+  const historyRepo = {
+    findAll: jest.fn(),
+    createMany: jest.fn(),
+  };
+  const zaloService = {
+    normalizeIncomingMessage: jest.fn(),
+    getBotIdentity: jest.fn(),
+    resolveSenderName: jest.fn(),
+    sendMessage: jest.fn(),
+  };
+  const aiAgentService = {
+    run: jest.fn(),
+  };
+
+  const service = new OmnichatBotService(
+    historyRepo as never,
+    zaloService as never,
+    aiAgentService as never,
+  );
+
+  const inbound: IZaloMessage = {
+    isSelf: false,
+    threadId: 'thread-1',
+    type: ENUM_ZALO_THREAD_TYPE.USER,
+    userId: 'zalo-user-1',
+    messageContent: 'Giá bao nhiêu?',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    historyRepo.findAll.mockResolvedValue([]);
+    historyRepo.createMany.mockResolvedValue(undefined);
+    zaloService.normalizeIncomingMessage.mockReturnValue(inbound);
+    zaloService.resolveSenderName.mockResolvedValue('An');
+    zaloService.sendMessage.mockResolvedValue(undefined);
+    aiAgentService.run.mockResolvedValue('Giá 199k nhé');
+  });
+
+  it('loads history filtered by shopId + userId', async () => {
+    await service.handleIncomingMessage({}, 'shop-a');
+    expect(historyRepo.findAll).toHaveBeenCalledWith(
+      { shopId: 'shop-a', userId: 'zalo-user-1' },
+      expect.objectContaining({ paging: { limit: 10 } }),
+    );
+    expect(historyRepo.createMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ shopId: 'shop-a', userId: 'zalo-user-1' }),
+      ]),
+    );
+  });
+
+  it('sends fallback instead of staying silent when AI returns empty', async () => {
+    aiAgentService.run.mockResolvedValue('   ');
+    await service.handleIncomingMessage({}, 'shop-a');
+    expect(zaloService.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shopId: 'shop-a',
+        message: OMNICHAT_BOT_FALLBACK_MESSAGE,
+      }),
+    );
+    expect(historyRepo.createMany).toHaveBeenCalled();
+  });
+
+  it('skips self messages', async () => {
+    zaloService.normalizeIncomingMessage.mockReturnValue({
+      ...inbound,
+      isSelf: true,
+    });
+    await service.handleIncomingMessage({}, 'shop-a');
+    expect(aiAgentService.run).not.toHaveBeenCalled();
+    expect(zaloService.sendMessage).not.toHaveBeenCalled();
+  });
+});
