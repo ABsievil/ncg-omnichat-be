@@ -10,6 +10,7 @@
     "sessionDisabled": "Phiên Zalo đã bị vô hiệu hóa.",
     "loginFailed": "Đăng nhập Zalo thất bại",
     "sendFailed": "Gửi tin Zalo thất bại",
-    "notConnected": "Chưa kết nối Zalo API"
+    "notConnected": "Chưa kết nối Zalo API",
+    "riskNotAccepted": "Vui lòng xác nhận cảnh báo rủi ro trước khi quét QR kết nối Zalo"
   }
 }

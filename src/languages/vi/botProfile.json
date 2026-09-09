@@ -1,0 +1,8 @@
+{
+  "get": "Lấy cấu hình bot thành công",
+  "update": "Cập nhật cấu hình bot thành công",
+  "acceptZaloRisk": "Đã xác nhận cảnh báo rủi ro Zalo",
+  "error": {
+    "notFound": "Không tìm thấy cấu hình bot"
+  }
+}

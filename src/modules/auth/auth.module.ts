@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { UserModule } from 'src/modules/user/user.module';
 import { ShopModule } from 'src/modules/shop/shop.module';
+import { BotProfileModule } from 'src/modules/bot-profile/bot-profile.module';
 import { AuthService } from 'src/modules/auth/services/auth.service';
 import { AuthSessionService } from 'src/modules/auth/services/auth.session.service';
 import { OtpService } from 'src/modules/auth/services/otp.service';
@@ -11,7 +12,7 @@ import { TenantGuard } from 'src/modules/auth/guards/tenant.guard';
 
 @Global()
 @Module({
-  imports: [UserModule, ShopModule],
+  imports: [UserModule, ShopModule, BotProfileModule],
   providers: [
     AuthService,
     AuthSessionService,

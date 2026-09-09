@@ -10,6 +10,7 @@
     "sessionDisabled": "Zalo session is disabled.",
     "loginFailed": "Zalo login failed",
     "sendFailed": "Failed to send Zalo message",
-    "notConnected": "Zalo API is not connected"
+    "notConnected": "Zalo API is not connected",
+    "riskNotAccepted": "Please accept the Zalo risk warning before scanning the QR code"
   }
 }

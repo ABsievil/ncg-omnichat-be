@@ -443,6 +443,24 @@ export class ZaloService implements OnModuleDestroy {
     }
   }
 
+  async sendTypingEvent(input: {
+    shopId?: string;
+    threadId: string;
+    type?: ENUM_ZALO_THREAD_TYPE;
+  }): Promise<void> {
+    try {
+      const shopId = await this.resolveShopId(input.shopId);
+      const api = await this.ensureApi(shopId);
+      const type =
+        input.type === ENUM_ZALO_THREAD_TYPE.GROUP
+          ? ThreadType.Group
+          : ThreadType.User;
+      await api.sendTypingEvent(input.threadId, type);
+    } catch {
+      this.logger.debug('sendTypingEvent failed (ignored)');
+    }
+  }
+
   async sendMessage(input: IZaloSendMessageInput): Promise<unknown> {
     const shopId = await this.resolveShopId(input.shopId);
     const api = await this.ensureApi(shopId);

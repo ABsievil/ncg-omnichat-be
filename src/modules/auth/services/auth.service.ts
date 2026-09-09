@@ -17,6 +17,7 @@ import { AuthTokenResponseDto } from 'src/modules/auth/dtos/response/auth.token.
 import { IAuthTokenPayload } from 'src/modules/auth/interfaces/auth.user.interface';
 import { AuthSessionService } from 'src/modules/auth/services/auth.session.service';
 import { OtpService } from 'src/modules/auth/services/otp.service';
+import { BotProfileService } from 'src/modules/bot-profile/services/bot-profile.service';
 import { ShopService } from 'src/modules/shop/services/shop.service';
 import {
   ENUM_USER_GENDER,
@@ -34,6 +35,7 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly userService: UserService,
     private readonly shopService: ShopService,
+    private readonly botProfileService: BotProfileService,
     private readonly helperHashService: HelperHashService,
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly configService: ConfigService,
@@ -252,6 +254,12 @@ export class AuthService {
 
     if (dirty) {
       await this.userRepository.save(user);
+    }
+    if (user.shopId) {
+      await this.botProfileService.ensure(
+        user.shopId,
+        user.displayName?.trim() || user.phone,
+      );
     }
     return user;
   }

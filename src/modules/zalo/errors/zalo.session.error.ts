@@ -65,4 +65,11 @@ export class ZaloSessionError {
       message: 'zalo.error.sessionNotFound',
     });
   }
+
+  throwRiskNotAccepted(): never {
+    throw new BadRequestException({
+      statusCode: ENUM_ZALO_STATUS_CODE.RISK_NOT_ACCEPTED,
+      message: 'zalo.error.riskNotAccepted',
+    });
+  }
 }

@@ -21,9 +21,12 @@ export class KnowledgeService implements OnModuleDestroy {
     this.client = null;
   }
 
-  async search(query: string, topK?: number): Promise<IKnowledgeHit[]> {
+  async search(
+    query: string,
+    options?: { topK?: number; shopId?: string },
+  ): Promise<IKnowledgeHit[]> {
     const limit =
-      topK ??
+      options?.topK ??
       this.configService.get<number>('ai.zilliz.topK') ??
       KNOWLEDGE_DEFAULT_TOP_K;
     const collection =
@@ -34,11 +37,18 @@ export class KnowledgeService implements OnModuleDestroy {
     const embeddings = this.getEmbeddings();
     const vector = await embeddings.embedQuery(query);
 
+    const shopId = options?.shopId?.trim();
+    const filter =
+      shopId && /^[a-zA-Z0-9_-]+$/.test(shopId)
+        ? `shopId == "${shopId}"`
+        : undefined;
+
     const result = await client.search({
       collection_name: collection,
       vectors: [vector],
       limit,
       output_fields: ['text', 'metadata', 'type', 'pageContent'],
+      ...(filter ? { filter } : {}),
     });
 
     const rows = (result.results ?? []) as Array<Record<string, any>>;

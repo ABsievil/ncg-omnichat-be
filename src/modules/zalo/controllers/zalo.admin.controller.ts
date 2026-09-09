@@ -16,6 +16,7 @@ import { RequireTenantShop } from 'src/modules/auth/decorators/require-tenant-sh
 import { Roles } from 'src/modules/auth/decorators/roles.decorator';
 import { ShopTenantProtected } from 'src/modules/auth/decorators/shop-tenant-protected.decorator';
 import { TenantShopId } from 'src/modules/auth/decorators/tenant-shop.decorator';
+import { BotProfileService } from 'src/modules/bot-profile/services/bot-profile.service';
 import { ENUM_USER_ROLE } from 'src/modules/user/enums/user.enum';
 import { ZaloLoginQrRequestDto } from 'src/modules/zalo/dtos/request/zalo.login-qr.request.dto';
 import { ZaloSendRequestDto } from 'src/modules/zalo/dtos/request/zalo.send.request.dto';
@@ -24,12 +25,17 @@ import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.
 import { ZaloSendResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.send.response.data.dto';
 import { ZaloSessionGetResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.data.dto';
 import { ZaloSessionListResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.list.response.data.dto';
+import { ZaloSessionError } from 'src/modules/zalo/errors/zalo.session.error';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 
 @ShopTenantProtected()
 @Controller({ version: '1', path: '/zalo' })
 export class ZaloAdminController {
-  constructor(private readonly zaloService: ZaloService) {}
+  constructor(
+    private readonly zaloService: ZaloService,
+    private readonly botProfileService: BotProfileService,
+    private readonly zaloSessionError: ZaloSessionError,
+  ) {}
 
   @Response('zalo.list')
   @Get('/sessions')
@@ -104,10 +110,15 @@ export class ZaloAdminController {
   @RequireTenantShop()
   @SkipRequestTimeout()
   @Sse('login-qr')
-  loginQr(
+  async loginQr(
     @TenantShopId() shopId: string,
     @Query() query: ZaloLoginQrRequestDto,
-  ): Observable<MessageEvent> {
+  ): Promise<Observable<MessageEvent>> {
+    const profile = await this.botProfileService.getOrCreate(shopId);
+    if (!this.botProfileService.hasAcceptedZaloRisk(profile)) {
+      this.zaloSessionError.throwRiskNotAccepted();
+    }
+
     return new Observable((subscriber: Subscriber<MessageEvent>) => {
       let closed = false;
 

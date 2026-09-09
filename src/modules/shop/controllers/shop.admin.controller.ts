@@ -21,6 +21,7 @@ import { ShopGetResponseDataDto } from 'src/modules/shop/dtos/response/shop.get.
 import { ShopListResponseDataDto } from 'src/modules/shop/dtos/response/shop.list.response.data.dto';
 import { ShopError } from 'src/modules/shop/errors/shop.error';
 import { ShopService } from 'src/modules/shop/services/shop.service';
+import { BotProfileService } from 'src/modules/bot-profile/services/bot-profile.service';
 import { ENUM_USER_ROLE } from 'src/modules/user/enums/user.enum';
 import { UserService } from 'src/modules/user/services/user.service';
 
@@ -31,6 +32,7 @@ export class ShopAdminController {
     private readonly shopService: ShopService,
     private readonly shopError: ShopError,
     private readonly userService: UserService,
+    private readonly botProfileService: BotProfileService,
   ) {}
 
   @Response('shop.list')
@@ -63,6 +65,7 @@ export class ShopAdminController {
     }
 
     const shop = await this.shopService.create(dto);
+    await this.botProfileService.ensure(shop._id, shop.name);
     if (user.role !== ENUM_USER_ROLE.ADMIN && !user.shopId) {
       await this.userService.assignShop(user.userId, shop._id);
     }

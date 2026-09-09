@@ -10,10 +10,12 @@ import {
   AI_AGENT_TOOL_NAME,
 } from 'src/modules/ai-agent/constants/ai-agent.constant';
 import {
-  AI_AGENT_SYSTEM_PROMPT,
   buildAiAgentUserPrompt,
+  buildKnowledgeToolDescription,
+  buildSystemPrompt,
 } from 'src/modules/ai-agent/constants/ai-agent.prompt.constant';
 import { IAiAgentInput } from 'src/modules/ai-agent/interfaces/ai-agent.interface';
+import { ENUM_BOT_PROFILE_TONE } from 'src/modules/bot-profile/enums/bot-profile.enum';
 import { KnowledgeService } from 'src/modules/knowledge/services/knowledge.service';
 
 @Injectable()
@@ -27,7 +29,10 @@ export class AiAgentService {
 
   async run(input: IAiAgentInput): Promise<string> {
     const llm = this.createChatModel();
-    const knowledgeTool = this.createKnowledgeTool();
+    const knowledgeTool = this.createKnowledgeTool({
+      shopId: input.kbFilterShopId ?? input.shopId,
+      shopName: input.shopName,
+    });
     const maxIterations =
       this.configService.get<number>('ai.maxIterations') ??
       AI_AGENT_DEFAULT_MAX_ITERATIONS;
@@ -35,7 +40,12 @@ export class AiAgentService {
     const agent = createAgent({
       model: llm,
       tools: [knowledgeTool],
-      systemPrompt: AI_AGENT_SYSTEM_PROMPT,
+      systemPrompt:
+        input.systemPrompt ??
+        buildSystemPrompt({
+          botName: input.shopName || 'Trợ lý shop',
+          tone: ENUM_BOT_PROFILE_TONE.FRIENDLY,
+        }),
     });
 
     const chatHistory = input.history
@@ -97,16 +107,18 @@ export class AiAgentService {
     });
   }
 
-  private createKnowledgeTool() {
+  private createKnowledgeTool(input: { shopId?: string; shopName?: string }) {
+    const shopId = input.shopId;
     return tool(
       async ({ query }: { query: string }) => {
-        const hits = await this.knowledgeService.search(query);
+        const hits = await this.knowledgeService.search(query, {
+          shopId,
+        });
         return this.knowledgeService.formatHitsForTool(hits);
       },
       {
         name: AI_AGENT_TOOL_NAME,
-        description:
-          'Tra cứu kiến thức SmartGo (trạm dừng, địa điểm, dịch vụ). Chỉ gọi khi câu hỏi liên quan SmartGo.',
+        description: buildKnowledgeToolDescription(input.shopName),
         schema: z.object({
           query: z
             .string()
