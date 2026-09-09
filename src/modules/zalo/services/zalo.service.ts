@@ -23,9 +23,11 @@ import { ZaloSessionError } from 'src/modules/zalo/errors/zalo.session.error';
 import {
   IZaloMessage,
   IZaloQrEvent,
+  IZaloResolveSenderNameInput,
   IZaloSendMessageInput,
   IZaloSessionCredentials,
 } from 'src/modules/zalo/interfaces/zalo.interface';
+import { mapIncomingZaloMessage } from 'src/modules/zalo/mappers/zalo-message.mapper';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
 import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.dto';
 import { ZaloSessionRepository } from 'src/modules/zalo/repositories/zalo-session.repository';
@@ -35,6 +37,8 @@ export class ZaloService implements OnModuleDestroy {
   private readonly logger = new Logger(ZaloService.name);
   /** key = shopId (1 Zalo account / shop) */
   private readonly apis = new Map<string, API>();
+  /** key = shopId:userId */
+  private readonly senderNameCache = new Map<string, string>();
 
   constructor(
     private readonly zaloSessionRepository: ZaloSessionRepository,
@@ -438,40 +442,90 @@ export class ZaloService implements OnModuleDestroy {
       this.logger.debug('sendTypingEvent failed (ignored)');
     }
 
+    const payload: {
+      msg: string;
+      quote?: IZaloSendMessageInput['quote'];
+      mentions?: IZaloSendMessageInput['mentions'];
+    } = {
+      msg: input.message,
+    };
+    if (input.quote) {
+      payload.quote = input.quote;
+    }
+    if (input.mentions?.length && type === ThreadType.Group) {
+      payload.mentions = input.mentions;
+    }
+
     try {
-      return await api.sendMessage({ msg: input.message }, input.threadId, type);
+      return await api.sendMessage(payload, input.threadId, type);
     } catch (error) {
+      if (payload.quote) {
+        this.logger.warn(
+          `Send with quote failed, retry without quote: ${String(error)}`,
+        );
+        try {
+          const fallback = {
+            msg: payload.msg,
+            ...(payload.mentions ? { mentions: payload.mentions } : {}),
+          };
+          return await api.sendMessage(fallback, input.threadId, type);
+        } catch (fallbackError) {
+          const reason =
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : String(fallbackError);
+          this.zaloSessionError.throwSendFailed(reason);
+        }
+      }
+
       const reason = error instanceof Error ? error.message : String(error);
       this.zaloSessionError.throwSendFailed(reason);
     }
   }
 
   normalizeIncomingMessage(message: unknown): IZaloMessage | null {
-    if (!message || typeof message !== 'object') {
-      return null;
+    return mapIncomingZaloMessage(message);
+  }
+
+  async resolveSenderName(
+    input: IZaloResolveSenderNameInput,
+  ): Promise<string | undefined> {
+    const fromMessage = input.userName?.trim();
+    if (fromMessage) {
+      this.senderNameCache.set(`${input.shopId}:${input.userId}`, fromMessage);
+      return fromMessage;
     }
 
-    const msg = message as Record<string, any>;
-    const data = msg.data ?? {};
-    const content = data.content;
-    if (typeof content !== 'string' || !content.trim()) {
-      return null;
+    if (input.type !== ENUM_ZALO_THREAD_TYPE.GROUP) {
+      return undefined;
     }
 
-    const threadType =
-      msg.type === ThreadType.Group || msg.type === 1
-        ? ENUM_ZALO_THREAD_TYPE.GROUP
-        : ENUM_ZALO_THREAD_TYPE.USER;
+    const cacheKey = `${input.shopId}:${input.userId}`;
+    const cached = this.senderNameCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
-    return {
-      isSelf: !!msg.isSelf,
-      threadId: String(msg.threadId ?? ''),
-      type: threadType,
-      userId: String(data.uidFrom ?? msg.threadId ?? ''),
-      userName: data.dName ? String(data.dName) : undefined,
-      messageContent: content.trim(),
-      raw: message,
-    };
+    const api = this.apis.get(input.shopId);
+    if (!api?.getGroupMembersInfo) {
+      return undefined;
+    }
+
+    try {
+      const result = await api.getGroupMembersInfo(input.userId);
+      const profile = result?.profiles?.[input.userId];
+      const name =
+        profile?.displayName?.trim() || profile?.zaloName?.trim() || undefined;
+      if (name) {
+        this.senderNameCache.set(cacheKey, name);
+      }
+      return name;
+    } catch (error) {
+      this.logger.debug(
+        `resolveSenderName failed shop=${input.shopId} user=${input.userId}: ${String(error)}`,
+      );
+      return undefined;
+    }
   }
 
   mapGet(session: ZaloSessionDoc | ZaloSessionEntity): ZaloSessionGetResponseDto {

@@ -4,6 +4,9 @@ import {
   ZALO_BLOCKED_MESSAGE,
   ZALO_STOP_KEYWORDS,
 } from 'src/modules/zalo/constants/zalo.constant';
+import { ENUM_ZALO_THREAD_TYPE } from 'src/modules/zalo/enums/zalo.enum';
+import { IZaloMessage } from 'src/modules/zalo/interfaces/zalo.interface';
+import { buildGroupMentionReply } from 'src/modules/zalo/mappers/zalo-message.mapper';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 import { OMNICHAT_BOT_HISTORY_LIMIT } from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
 import { ZaloChatHistoryEntity } from 'src/modules/omnichat-bot/entities/zalo-chat-history.entity';
@@ -44,16 +47,23 @@ export class OmnichatBotService {
       return;
     }
 
+    const senderName = await this.zaloService.resolveSenderName({
+      shopId,
+      userId: message.userId,
+      type: message.type,
+      userName: message.userName,
+    });
+
     this.logger.log(
-      `Process Zalo message shop=${shopId} user=${message.userId} thread=${message.threadId}`,
+      `Process Zalo message shop=${shopId} user=${message.userId} name=${senderName ?? '-'} thread=${message.threadId} type=${message.type}`,
     );
 
     if (this.isStopMessage(message.messageContent)) {
-      await this.zaloService.sendMessage({
+      await this.sendThreadReply({
         shopId,
-        threadId: message.threadId,
-        message: ZALO_BLOCKED_MESSAGE,
-        type: message.type,
+        message,
+        senderName,
+        reply: ZALO_BLOCKED_MESSAGE,
       });
       return;
     }
@@ -63,6 +73,8 @@ export class OmnichatBotService {
       userId: message.userId,
       message: message.messageContent,
       history,
+      senderName,
+      isGroup: message.type === ENUM_ZALO_THREAD_TYPE.GROUP,
     });
 
     if (!reply?.trim()) {
@@ -70,11 +82,11 @@ export class OmnichatBotService {
       return;
     }
 
-    await this.zaloService.sendMessage({
+    await this.sendThreadReply({
       shopId,
-      threadId: message.threadId,
-      message: reply,
-      type: message.type,
+      message,
+      senderName,
+      reply,
     });
 
     await this.saveHistoryPair({
@@ -82,12 +94,38 @@ export class OmnichatBotService {
       threadId: message.threadId,
       userContent: message.messageContent,
       assistantContent: reply,
+      senderName,
     });
   }
 
   private isStopMessage(content: string): boolean {
     const normalized = content.toLowerCase();
-    return ZALO_STOP_KEYWORDS.some(keyword => normalized.includes(keyword));
+    return ZALO_STOP_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  }
+
+  private async sendThreadReply(input: {
+    shopId: string;
+    message: IZaloMessage;
+    senderName?: string;
+    reply: string;
+  }): Promise<void> {
+    const isGroup = input.message.type === ENUM_ZALO_THREAD_TYPE.GROUP;
+    const outgoing = isGroup
+      ? buildGroupMentionReply({
+          reply: input.reply,
+          senderName: input.senderName,
+          userId: input.message.userId,
+        })
+      : { message: input.reply };
+
+    await this.zaloService.sendMessage({
+      shopId: input.shopId,
+      threadId: input.message.threadId,
+      message: outgoing.message,
+      type: input.message.type,
+      quote: input.message.quote,
+      mentions: outgoing.mentions,
+    });
   }
 
   private async getHistory(userId: string) {
@@ -99,12 +137,11 @@ export class OmnichatBotService {
       },
     );
 
-    return rows
-      .reverse()
-      .map(row => ({
-        role: row.role as ENUM_ZALO_CHAT_ROLE,
-        content: row.content,
-      }));
+    return rows.reverse().map((row) => ({
+      role: row.role,
+      content: row.content,
+      senderName: row.senderName ?? undefined,
+    }));
   }
 
   private async saveHistoryPair(input: {
@@ -112,6 +149,7 @@ export class OmnichatBotService {
     threadId: string;
     userContent: string;
     assistantContent: string;
+    senderName?: string;
   }): Promise<void> {
     const now = new Date();
     await this.zaloChatHistoryRepository.createMany([
@@ -120,6 +158,7 @@ export class OmnichatBotService {
         threadId: input.threadId,
         role: ENUM_ZALO_CHAT_ROLE.USER,
         content: input.userContent,
+        senderName: input.senderName ?? null,
         timestamp: now,
       } as ZaloChatHistoryEntity,
       {

@@ -25,6 +25,9 @@ export class ZaloChatHistoryEntity extends DatabaseEntityBase {
   @DatabaseProp({ required: true, default: '' })
   content!: string;
 
+  @DatabaseProp({ required: false, type: String, default: null })
+  senderName?: string | null;
+
   @DatabaseProp({ required: true, type: Date, index: true, default: Date.now })
   timestamp!: Date;
 }

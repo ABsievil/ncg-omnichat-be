@@ -39,12 +39,18 @@ export class AiAgentService {
     });
 
     const chatHistory = input.history
-      .map(item => `${item.role === 'user' ? 'User' : 'Assistant'}: ${item.content}`)
+      .map((item) => {
+        const speaker =
+          item.role === 'user' ? item.senderName || 'User' : 'Assistant';
+        return `${speaker}: ${item.content}`;
+      })
       .join('\n');
 
     const prompt = buildAiAgentUserPrompt({
       message: input.message,
       chatHistory,
+      senderName: input.senderName,
+      isGroup: input.isGroup,
     });
 
     try {
