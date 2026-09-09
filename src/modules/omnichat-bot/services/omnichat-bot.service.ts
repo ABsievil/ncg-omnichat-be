@@ -6,6 +6,10 @@ import {
 } from 'src/modules/zalo/constants/zalo.constant';
 import { ENUM_ZALO_THREAD_TYPE } from 'src/modules/zalo/enums/zalo.enum';
 import { IZaloMessage } from 'src/modules/zalo/interfaces/zalo.interface';
+import {
+  isGroupBotAddressed,
+  stripBotAddressFromContent,
+} from 'src/modules/zalo/mappers/zalo-group-address.mapper';
 import { buildGroupMentionReply } from 'src/modules/zalo/mappers/zalo-message.mapper';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 import { OMNICHAT_BOT_HISTORY_LIMIT } from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
@@ -47,6 +51,25 @@ export class OmnichatBotService {
       return;
     }
 
+    const isGroup = message.type === ENUM_ZALO_THREAD_TYPE.GROUP;
+    let botNames: string[] = [];
+    if (isGroup) {
+      const identity = await this.zaloService.getBotIdentity(shopId);
+      botNames = identity.names;
+      if (
+        !isGroupBotAddressed({
+          messageContent: message.messageContent,
+          mentions: message.mentions,
+          identity,
+        })
+      ) {
+        this.logger.debug(
+          `Skip group message without bot address shop=${shopId} thread=${message.threadId} user=${message.userId}`,
+        );
+        return;
+      }
+    }
+
     const senderName = await this.zaloService.resolveSenderName({
       shopId,
       userId: message.userId,
@@ -69,12 +92,15 @@ export class OmnichatBotService {
     }
 
     const history = await this.getHistory(message.userId);
+    const userMessage = isGroup
+      ? stripBotAddressFromContent(message.messageContent, botNames)
+      : message.messageContent;
     const reply = await this.aiAgentService.run({
       userId: message.userId,
-      message: message.messageContent,
+      message: userMessage,
       history,
       senderName,
-      isGroup: message.type === ENUM_ZALO_THREAD_TYPE.GROUP,
+      isGroup,
     });
 
     if (!reply?.trim()) {

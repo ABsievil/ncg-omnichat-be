@@ -37,6 +37,12 @@ declare module 'zca-js' {
     getGroupMembersInfo?(memberId: string | string[]): Promise<{
       profiles?: Record<string, { displayName?: string; zaloName?: string }>;
     }>;
+    fetchAccountInfo?(): Promise<{
+      userId?: string;
+      username?: string;
+      displayName?: string;
+      zaloName?: string;
+    }>;
     context?: Record<string, unknown>;
   }
 

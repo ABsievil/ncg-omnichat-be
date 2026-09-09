@@ -39,6 +39,12 @@ export class ZaloSessionEntity extends DatabaseEntityBase {
   @DatabaseProp({ required: false, type: String, default: null })
   ownId?: string | null;
 
+  @DatabaseProp({ required: false, type: String, default: null })
+  ownDisplayName?: string | null;
+
+  @DatabaseProp({ required: false, type: String, default: null })
+  ownZaloName?: string | null;
+
   @DatabaseProp({
     required: true,
     type: String,

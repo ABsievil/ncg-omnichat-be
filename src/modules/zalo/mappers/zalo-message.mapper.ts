@@ -51,6 +51,7 @@ export function mapIncomingZaloMessage(message: unknown): IZaloMessage | null {
     userName: extractZaloSenderName(data),
     messageContent: content.trim(),
     quote: extractZaloQuote(data),
+    mentions: extractZaloMentions(data),
     raw: message,
   };
 }
@@ -89,6 +90,62 @@ export function extractZaloQuote(
     ts: typeof data.ts === 'number' ? data.ts : asTrimmedString(data.ts),
     ttl: typeof data.ttl === 'number' ? data.ttl : undefined,
   };
+}
+
+export function extractZaloMentions(
+  data: Record<string, unknown>,
+): IZaloGroupMention[] | undefined {
+  const fromArray = parseMentionList(data.mentions);
+  if (fromArray.length) {
+    return fromArray;
+  }
+
+  if (typeof data.mentionInfo === 'string' && data.mentionInfo.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(data.mentionInfo);
+      const fromInfo = parseMentionList(parsed);
+      if (fromInfo.length) {
+        return fromInfo;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function parseMentionList(raw: unknown): IZaloGroupMention[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const mentions: IZaloGroupMention[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const row = item as Record<string, unknown>;
+    const uid = asTrimmedString(row.uid);
+    const pos = toFiniteNumber(row.pos);
+    const len = toFiniteNumber(row.len);
+    if (!uid || pos == null || len == null || len <= 0) {
+      continue;
+    }
+    mentions.push({ uid, pos, len });
+  }
+  return mentions;
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 export function buildGroupMentionReply(input: {

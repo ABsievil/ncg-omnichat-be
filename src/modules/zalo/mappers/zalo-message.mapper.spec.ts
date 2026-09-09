@@ -40,6 +40,24 @@ describe('zalo-message.mapper', () => {
           content: 'Cho mình hỏi trạm gần nhất',
         },
       });
+      expect(mapped?.mentions).toBeUndefined();
+    });
+
+    it('maps group mentions from data.mentions', () => {
+      const mapped = mapIncomingZaloMessage({
+        isSelf: false,
+        threadId: 'group-1',
+        type: 1,
+        data: {
+          uidFrom: 'user-9',
+          dName: 'An',
+          content: '@Bot hỏi trạm',
+          msgId: 'msg-12',
+          mentions: [{ uid: 'bot-1', pos: 0, len: 4, type: 0 }],
+        },
+      });
+
+      expect(mapped?.mentions).toEqual([{ uid: 'bot-1', pos: 0, len: 4 }]);
     });
 
     it('maps a direct message sender name from displayName fallback', () => {
