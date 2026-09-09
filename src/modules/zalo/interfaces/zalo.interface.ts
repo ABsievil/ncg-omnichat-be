@@ -7,6 +7,23 @@ export interface IZaloSessionCredentials {
   proxy?: string;
 }
 
+export interface IZaloMessageQuote {
+  content: unknown;
+  msgType?: string;
+  propertyExt?: unknown;
+  uidFrom: string;
+  msgId: string;
+  cliMsgId?: string;
+  ts?: string | number;
+  ttl?: number;
+}
+
+export interface IZaloGroupMention {
+  pos: number;
+  uid: string;
+  len: number;
+}
+
 export interface IZaloMessage {
   isSelf: boolean;
   threadId: string;
@@ -14,6 +31,7 @@ export interface IZaloMessage {
   userId: string;
   userName?: string;
   messageContent: string;
+  quote?: IZaloMessageQuote;
   raw?: unknown;
 }
 
@@ -22,6 +40,15 @@ export interface IZaloSendMessageInput {
   threadId: string;
   message: string;
   type?: ENUM_ZALO_THREAD_TYPE;
+  quote?: IZaloMessageQuote;
+  mentions?: IZaloGroupMention[];
+}
+
+export interface IZaloResolveSenderNameInput {
+  shopId: string;
+  userId: string;
+  type: ENUM_ZALO_THREAD_TYPE;
+  userName?: string;
 }
 
 export interface IZaloQrEvent {

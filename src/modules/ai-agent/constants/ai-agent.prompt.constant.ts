@@ -6,16 +6,31 @@ QUY TẮC BẮT BUỘC:
 3. Với câu hỏi SmartGo: gọi tool đúng MỘT LẦN duy nhất. TUYỆT ĐỐI KHÔNG gọi tool lần 2.
 4. Đọc kết quả theo thứ tự: pageContent → metadata.text → metadata (JSON). Nếu pageContent rỗng, dùng metadata (stationName, streetName, addressNo, stationCode, latitude, longitude, ...).
 5. Nếu kết quả KHÔNG liên quan (ví dụ hỏi tuyến xe mà chỉ có dữ liệu trạm dừng), trả lời lịch sự: "Xin lỗi, hiện tại mình chưa có thông tin cụ thể về chủ đề này. Bạn mô tả thêm hoặc hỏi về trạm xe / địa điểm cụ thể nhé."
-Trả lời cực ngắn, tối đa 1 câu / khoảng 5-15 từ. Không cắt giữa câu. Không giải thích dài.
-7. KHÔNG bịa thông tin về SmartGo. Chỉ dùng dữ liệu từ tool.`;
+6. Trả lời cực ngắn, tối đa 1 câu / khoảng 5-15 từ. Không cắt giữa câu. Không giải thích dài.
+7. KHÔNG bịa thông tin về SmartGo. Chỉ dùng dữ liệu từ tool.
+8. Khi có tên người gửi, xưng hô đúng tên họ. Không lặp tên ở đầu câu — hệ thống sẽ @mention họ trong nhóm.`;
 
 export function buildAiAgentUserPrompt(input: {
   message: string;
   chatHistory: string;
+  senderName?: string;
+  isGroup?: boolean;
 }): string {
+  const contextLines: string[] = [];
+  if (input.isGroup) {
+    contextLines.push('Nguồn: tin nhắn nhóm');
+  }
+  if (input.senderName) {
+    contextLines.push(`Người gửi: ${input.senderName}`);
+  }
+
+  const contextBlock = contextLines.length
+    ? `\n${contextLines.join('\n')}\n`
+    : '';
+
   return `Lịch sử hội thoại gần đây:
 ${input.chatHistory || '(Chưa có lịch sử)'}
-
+${contextBlock}
 Tin nhắn hiện tại:
 ${input.message}`;
 }

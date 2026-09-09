@@ -34,6 +34,9 @@ declare module 'zca-js' {
     sendTypingEvent(threadId: string, type: ThreadType): Promise<unknown>;
     getOwnId?(): string | number;
     getContext?(): Record<string, unknown>;
+    getGroupMembersInfo?(memberId: string | string[]): Promise<{
+      profiles?: Record<string, { displayName?: string; zaloName?: string }>;
+    }>;
     context?: Record<string, unknown>;
   }
 
