@@ -5,6 +5,9 @@ set -euo pipefail
 
 # MongoDB
 if ! pgrep -x mongod >/dev/null 2>&1; then
+    # Clear a stale lock/socket left behind by a previous (snapshotted) run so
+    # a fresh mongod can start cleanly. WiredTiger recovers data on startup.
+    rm -f /var/lib/mongodb/mongod.lock /tmp/mongodb-27017.sock 2>/dev/null || true
     mongod \
         --dbpath /var/lib/mongodb \
         --bind_ip 127.0.0.1 \

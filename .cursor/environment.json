@@ -9,7 +9,8 @@
   "terminals": [
     {
       "name": "nest-dev",
-      "command": "yarn start:dev"
+      "command": "bash .cursor/dev.sh",
+      "description": "NestJS watch-mode dev server on port 8090 (uses local MongoDB + Redis)."
     }
   ],
   "ports": [
