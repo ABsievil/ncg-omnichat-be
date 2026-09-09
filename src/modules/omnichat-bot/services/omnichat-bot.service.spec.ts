@@ -66,16 +66,44 @@ describe('OmnichatBotService', () => {
     aiAgentService.run.mockResolvedValue('Giá 199k nhé');
   });
 
-  it('loads history filtered by shopId + userId', async () => {
+  it('loads history filtered by shopId + threadId', async () => {
     await service.handleIncomingMessage({}, 'shop-a');
     expect(historyRepo.findAll).toHaveBeenCalledWith(
-      { shopId: 'shop-a', userId: 'zalo-user-1' },
+      { shopId: 'shop-a', threadId: 'thread-1' },
       expect.objectContaining({ paging: { limit: 10 } }),
     );
     expect(historyRepo.createMany).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ shopId: 'shop-a', userId: 'zalo-user-1' }),
+        expect.objectContaining({
+          shopId: 'shop-a',
+          userId: 'zalo-user-1',
+          threadId: 'thread-1',
+        }),
       ]),
+    );
+  });
+
+  it('does not mix history across threads of the same customer', async () => {
+    zaloService.normalizeIncomingMessage.mockReturnValue({
+      ...inbound,
+      threadId: 'group-9',
+      type: ENUM_ZALO_THREAD_TYPE.GROUP,
+      mentions: [{ pos: 0, uid: 'bot-1', len: 4 }],
+    });
+    zaloService.getBotIdentity.mockResolvedValue({
+      ownId: 'bot-1',
+      names: ['Bot'],
+    });
+
+    await service.handleIncomingMessage({}, 'shop-a');
+
+    expect(historyRepo.findAll).toHaveBeenCalledWith(
+      { shopId: 'shop-a', threadId: 'group-9' },
+      expect.any(Object),
+    );
+    expect(historyRepo.findAll).not.toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'zalo-user-1' }),
+      expect.any(Object),
     );
   });
 

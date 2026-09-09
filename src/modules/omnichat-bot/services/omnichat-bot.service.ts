@@ -94,7 +94,7 @@ export class OmnichatBotService {
       return;
     }
 
-    const history = await this.getHistory(shopId, message.userId);
+    const history = await this.getHistory(shopId, message.threadId);
     const userMessage = isGroup
       ? stripBotAddressFromContent(message.messageContent, botNames)
       : message.messageContent;
@@ -158,9 +158,9 @@ export class OmnichatBotService {
     });
   }
 
-  private async getHistory(shopId: string, userId: string) {
+  private async getHistory(shopId: string, threadId: string) {
     const rows = await this.zaloChatHistoryRepository.findAll(
-      { shopId, userId },
+      { shopId, threadId },
       {
         order: { timestamp: -1 },
         paging: { limit: OMNICHAT_BOT_HISTORY_LIMIT },
