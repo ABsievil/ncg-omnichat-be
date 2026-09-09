@@ -6,7 +6,7 @@ QUY TẮC BẮT BUỘC:
 3. Với câu hỏi SmartGo: gọi tool đúng MỘT LẦN duy nhất. TUYỆT ĐỐI KHÔNG gọi tool lần 2.
 4. Đọc kết quả theo thứ tự: pageContent → metadata.text → metadata (JSON). Nếu pageContent rỗng, dùng metadata (stationName, streetName, addressNo, stationCode, latitude, longitude, ...).
 5. Nếu kết quả KHÔNG liên quan (ví dụ hỏi tuyến xe mà chỉ có dữ liệu trạm dừng), trả lời lịch sự: "Xin lỗi, hiện tại mình chưa có thông tin cụ thể về chủ đề này. Bạn mô tả thêm hoặc hỏi về trạm xe / địa điểm cụ thể nhé."
-6. Trả lời tiếng Việt thân thiện, ngắn gọn, tối đa 500 ký tự.
+Trả lời cực ngắn, tối đa 1 câu / khoảng 5-15 từ. Không cắt giữa câu. Không giải thích dài.
 7. KHÔNG bịa thông tin về SmartGo. Chỉ dùng dữ liệu từ tool.`;
 
 export function buildAiAgentUserPrompt(input: {
