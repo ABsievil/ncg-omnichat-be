@@ -1,0 +1,21 @@
+{
+  "name": "c2d-omnichat-be",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "nest-dev",
+      "command": "yarn start:dev"
+    }
+  ],
+  "ports": [
+    {
+      "name": "api",
+      "port": 8090
+    }
+  ]
+}
