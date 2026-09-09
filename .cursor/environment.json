@@ -1,0 +1,22 @@
+{
+  "name": "c2d-omnichat-be",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "nest-dev",
+      "command": "bash .cursor/dev.sh",
+      "description": "NestJS watch-mode dev server on port 8090 (uses local MongoDB + Redis)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "api",
+      "port": 8090
+    }
+  ]
+}
