@@ -64,7 +64,7 @@ export class OmnichatBotService {
         })
       ) {
         this.logger.debug(
-          `Skip group message without bot address shop=${shopId} thread=${message.threadId} user=${message.userId}`,
+          `Skip group message without bot address shop=${shopId} thread=${message.threadId} user=${message.userId} ownId=${identity.ownId ?? '-'} names=${identity.names.join('|') || '(empty)'}`,
         );
         return;
       }

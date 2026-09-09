@@ -38,6 +38,12 @@ declare module 'zca-js' {
       profiles?: Record<string, { displayName?: string; zaloName?: string }>;
     }>;
     fetchAccountInfo?(): Promise<{
+      profile?: {
+        userId?: string;
+        username?: string;
+        displayName?: string;
+        zaloName?: string;
+      };
       userId?: string;
       username?: string;
       displayName?: string;
