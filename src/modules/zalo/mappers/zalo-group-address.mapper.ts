@@ -23,6 +23,39 @@ export function collectAccountNames(
   return names;
 }
 
+export function extractAccountProfileNames(account: unknown): {
+  userId?: string;
+  displayName?: string;
+  zaloName?: string;
+  username?: string;
+} {
+  if (!account || typeof account !== 'object') {
+    return {};
+  }
+
+  const raw = account as Record<string, unknown>;
+  const nested =
+    raw.profile && typeof raw.profile === 'object'
+      ? (raw.profile as Record<string, unknown>)
+      : undefined;
+  const profile = nested ?? raw;
+
+  return {
+    userId: readProfileString(profile.userId ?? raw.userId),
+    displayName: readProfileString(profile.displayName ?? raw.displayName),
+    zaloName: readProfileString(profile.zaloName ?? raw.zaloName),
+    username: readProfileString(profile.username ?? raw.username),
+  };
+}
+
+function readProfileString(value: unknown): string | undefined {
+  if (typeof value === 'string' || typeof value === 'number') {
+    const text = String(value).trim();
+    return text || undefined;
+  }
+  return undefined;
+}
+
 export function isGroupBotAddressed(input: IZaloGroupAddressInput): boolean {
   const ownId = input.identity.ownId?.trim();
   if (ownId && input.mentions?.some((mention) => mention.uid === ownId)) {
@@ -39,10 +72,21 @@ export function isGroupBotAddressed(input: IZaloGroupAddressInput): boolean {
     if (normalizedName.length < ZALO_BOT_NAME_MATCH_MIN_LENGTH) {
       return false;
     }
-    return (
-      content.includes(normalizedName) || content.includes(`@${normalizedName}`)
-    );
+    if (
+      content.includes(normalizedName) ||
+      content.includes(`@${normalizedName}`)
+    ) {
+      return true;
+    }
+
+    const contentTokens = tokenizeForMatch(content);
+    const nameTokens = tokenizeForMatch(normalizedName);
+    return nameTokens.length === 1 && contentTokens.includes(nameTokens[0]);
   });
+}
+
+function tokenizeForMatch(value: string): string[] {
+  return value.split(/[^a-z0-9]+/i).filter(Boolean);
 }
 
 export function stripBotAddressFromContent(

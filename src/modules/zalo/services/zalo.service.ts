@@ -28,7 +28,7 @@ import {
   IZaloSendMessageInput,
   IZaloSessionCredentials,
 } from 'src/modules/zalo/interfaces/zalo.interface';
-import { collectAccountNames } from 'src/modules/zalo/mappers/zalo-group-address.mapper';
+import { collectAccountNames, extractAccountProfileNames } from 'src/modules/zalo/mappers/zalo-group-address.mapper';
 import { mapIncomingZaloMessage } from 'src/modules/zalo/mappers/zalo-message.mapper';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
 import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.dto';
@@ -545,7 +545,7 @@ export class ZaloService implements OnModuleDestroy {
 
   async getBotIdentity(shopId: string): Promise<IZaloBotIdentity> {
     const cached = this.botIdentityCache.get(shopId);
-    if (cached) {
+    if (cached?.names.length) {
       return cached;
     }
 
@@ -566,7 +566,9 @@ export class ZaloService implements OnModuleDestroy {
       return identity;
     }
 
-    this.botIdentityCache.set(shopId, fromSession);
+    if (fromSession.names.length) {
+      this.botIdentityCache.set(shopId, fromSession);
+    }
     return fromSession;
   }
 
@@ -627,10 +629,11 @@ export class ZaloService implements OnModuleDestroy {
     if (typeof api.fetchAccountInfo === 'function') {
       try {
         const account = await api.fetchAccountInfo();
-        userId = account?.userId ? String(account.userId) : undefined;
-        ownDisplayName = account?.displayName?.trim() || undefined;
-        ownZaloName = account?.zaloName?.trim() || undefined;
-        username = account?.username?.trim() || undefined;
+        const parsed = extractAccountProfileNames(account);
+        userId = parsed.userId;
+        ownDisplayName = parsed.displayName;
+        ownZaloName = parsed.zaloName;
+        username = parsed.username;
       } catch (error) {
         this.logger.debug(
           `fetchAccountInfo failed shop=${shopId}: ${String(error)}`,
@@ -639,8 +642,24 @@ export class ZaloService implements OnModuleDestroy {
     }
 
     const ownId = userId || ownIdFromApi || undefined;
+
+    if ((!ownDisplayName || !ownZaloName) && ownId && api.getGroupMembersInfo) {
+      try {
+        const members = await api.getGroupMembersInfo(ownId);
+        const member = members?.profiles?.[ownId];
+        ownDisplayName = ownDisplayName || member?.displayName?.trim();
+        ownZaloName = ownZaloName || member?.zaloName?.trim();
+      } catch (error) {
+        this.logger.debug(
+          `getGroupMembersInfo own profile failed shop=${shopId}: ${String(error)}`,
+        );
+      }
+    }
+
     const names = collectAccountNames(ownDisplayName, ownZaloName, username);
-    this.botIdentityCache.set(shopId, { ownId, names });
+    if (ownId || names.length) {
+      this.botIdentityCache.set(shopId, { ownId, names });
+    }
 
     return {
       ownId,

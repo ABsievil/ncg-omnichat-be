@@ -1,4 +1,5 @@
 import {
+  extractAccountProfileNames,
   isGroupBotAddressed,
   stripBotAddressFromContent,
 } from 'src/modules/zalo/mappers/zalo-group-address.mapper';
@@ -38,6 +39,15 @@ describe('zalo-group-address.mapper', () => {
       ).toBe(true);
     });
 
+    it('returns true when the text contains a short account name like Ncg', () => {
+      expect(
+        isGroupBotAddressed({
+          messageContent: 'Ncg có đó k',
+          identity: { ownId: 'bot-1', names: ['Ncg'] },
+        }),
+      ).toBe(true);
+    });
+
     it('returns false for unrelated group chat', () => {
       expect(
         isGroupBotAddressed({
@@ -71,6 +81,26 @@ describe('zalo-group-address.mapper', () => {
       expect(stripBotAddressFromContent('@SmartGo Bot', ['SmartGo Bot'])).toBe(
         '@SmartGo Bot',
       );
+    });
+  });
+
+  describe('extractAccountProfileNames', () => {
+    it('reads nested profile.displayName from fetchAccountInfo', () => {
+      expect(
+        extractAccountProfileNames({
+          profile: {
+            userId: 'bot-1',
+            displayName: 'Ncg',
+            zaloName: 'Ncg Zalo',
+            username: 'ncg',
+          },
+        }),
+      ).toEqual({
+        userId: 'bot-1',
+        displayName: 'Ncg',
+        zaloName: 'Ncg Zalo',
+        username: 'ncg',
+      });
     });
   });
 });
