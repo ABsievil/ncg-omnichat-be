@@ -21,12 +21,14 @@ import {
 } from 'src/modules/zalo/enums/zalo.enum';
 import { ZaloSessionError } from 'src/modules/zalo/errors/zalo.session.error';
 import {
+  IZaloBotIdentity,
   IZaloMessage,
   IZaloQrEvent,
   IZaloResolveSenderNameInput,
   IZaloSendMessageInput,
   IZaloSessionCredentials,
 } from 'src/modules/zalo/interfaces/zalo.interface';
+import { collectAccountNames } from 'src/modules/zalo/mappers/zalo-group-address.mapper';
 import { mapIncomingZaloMessage } from 'src/modules/zalo/mappers/zalo-message.mapper';
 import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.upsert.request.dto';
 import { ZaloSessionGetResponseDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.dto';
@@ -39,6 +41,8 @@ export class ZaloService implements OnModuleDestroy {
   private readonly apis = new Map<string, API>();
   /** key = shopId:userId */
   private readonly senderNameCache = new Map<string, string>();
+  /** key = shopId */
+  private readonly botIdentityCache = new Map<string, IZaloBotIdentity>();
 
   constructor(
     private readonly zaloSessionRepository: ZaloSessionRepository,
@@ -70,6 +74,7 @@ export class ZaloService implements OnModuleDestroy {
   }
 
   clearApi(shopId: string): void {
+    this.botIdentityCache.delete(shopId);
     const api = this.apis.get(shopId);
     if (!api) {
       return;
@@ -263,9 +268,7 @@ export class ZaloService implements OnModuleDestroy {
     this.apis.set(shopId, api);
 
     try {
-      const ownId =
-        typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
-      // Never resurrect a DISABLED session if disconnect raced with login.
+      const profile = await this.resolveOwnProfile(shopId, api);
       await this.zaloSessionRepository.updateMany(
         {
           shopId,
@@ -274,7 +277,11 @@ export class ZaloService implements OnModuleDestroy {
         {
           status: ENUM_ZALO_SESSION_STATUS.ACTIVE,
           lastLoginAt: new Date(),
-          ...(ownId ? { ownId } : {}),
+          ...(profile.ownId ? { ownId: profile.ownId } : {}),
+          ...(profile.ownDisplayName
+            ? { ownDisplayName: profile.ownDisplayName }
+            : {}),
+          ...(profile.ownZaloName ? { ownZaloName: profile.ownZaloName } : {}),
         },
       );
     } catch (error) {
@@ -384,10 +391,18 @@ export class ZaloService implements OnModuleDestroy {
       proxy,
     });
 
-    const ownId =
-      typeof api.getOwnId === 'function' ? String(api.getOwnId()) : null;
-    if (ownId) {
-      await this.zaloSessionRepository.updateMany({ shopId }, { ownId });
+    const profile = await this.resolveOwnProfile(shopId, api);
+    if (profile.ownId) {
+      await this.zaloSessionRepository.updateMany(
+        { shopId },
+        {
+          ownId: profile.ownId,
+          ...(profile.ownDisplayName
+            ? { ownDisplayName: profile.ownDisplayName }
+            : {}),
+          ...(profile.ownZaloName ? { ownZaloName: profile.ownZaloName } : {}),
+        },
+      );
     } else {
       await this.zaloSessionRepository.updateManyRaw(
         { shopId },
@@ -528,6 +543,33 @@ export class ZaloService implements OnModuleDestroy {
     }
   }
 
+  async getBotIdentity(shopId: string): Promise<IZaloBotIdentity> {
+    const cached = this.botIdentityCache.get(shopId);
+    if (cached) {
+      return cached;
+    }
+
+    const session = await this.findSessionByShopId(shopId);
+    const fromSession: IZaloBotIdentity = {
+      ownId: session?.ownId?.trim() || undefined,
+      names: collectAccountNames(session?.ownDisplayName, session?.ownZaloName),
+    };
+
+    const api = this.apis.get(shopId);
+    if (api) {
+      const profile = await this.resolveOwnProfile(shopId, api);
+      const identity: IZaloBotIdentity = {
+        ownId: profile.ownId || fromSession.ownId,
+        names: collectAccountNames(...profile.names, ...fromSession.names),
+      };
+      this.botIdentityCache.set(shopId, identity);
+      return identity;
+    }
+
+    this.botIdentityCache.set(shopId, fromSession);
+    return fromSession;
+  }
+
   mapGet(session: ZaloSessionDoc | ZaloSessionEntity): ZaloSessionGetResponseDto {
     const doc = session as ZaloSessionDoc;
     return {
@@ -542,6 +584,8 @@ export class ZaloService implements OnModuleDestroy {
       shopId: doc.shopId,
       status: doc.status,
       ownId: doc.ownId ?? null,
+      ownDisplayName: doc.ownDisplayName ?? null,
+      ownZaloName: doc.ownZaloName ?? null,
       proxy: doc.proxy ?? null,
       lastLoginAt: doc.lastLoginAt ?? null,
     };
@@ -560,6 +604,49 @@ export class ZaloService implements OnModuleDestroy {
       sessions,
       createdBy: [] as [],
       updatedBy: [] as [],
+    };
+  }
+
+  private async resolveOwnProfile(
+    shopId: string,
+    api: API,
+  ): Promise<{
+    ownId?: string;
+    ownDisplayName?: string;
+    ownZaloName?: string;
+    names: string[];
+  }> {
+    const ownIdFromApi =
+      typeof api.getOwnId === 'function' ? String(api.getOwnId()) : undefined;
+
+    let ownDisplayName: string | undefined;
+    let ownZaloName: string | undefined;
+    let username: string | undefined;
+    let userId: string | undefined;
+
+    if (typeof api.fetchAccountInfo === 'function') {
+      try {
+        const account = await api.fetchAccountInfo();
+        userId = account?.userId ? String(account.userId) : undefined;
+        ownDisplayName = account?.displayName?.trim() || undefined;
+        ownZaloName = account?.zaloName?.trim() || undefined;
+        username = account?.username?.trim() || undefined;
+      } catch (error) {
+        this.logger.debug(
+          `fetchAccountInfo failed shop=${shopId}: ${String(error)}`,
+        );
+      }
+    }
+
+    const ownId = userId || ownIdFromApi || undefined;
+    const names = collectAccountNames(ownDisplayName, ownZaloName, username);
+    this.botIdentityCache.set(shopId, { ownId, names });
+
+    return {
+      ownId,
+      ownDisplayName,
+      ownZaloName: ownZaloName || username,
+      names,
     };
   }
 

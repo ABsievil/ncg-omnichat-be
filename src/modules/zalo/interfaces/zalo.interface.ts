@@ -32,6 +32,7 @@ export interface IZaloMessage {
   userName?: string;
   messageContent: string;
   quote?: IZaloMessageQuote;
+  mentions?: IZaloGroupMention[];
   raw?: unknown;
 }
 
@@ -42,6 +43,17 @@ export interface IZaloSendMessageInput {
   type?: ENUM_ZALO_THREAD_TYPE;
   quote?: IZaloMessageQuote;
   mentions?: IZaloGroupMention[];
+}
+
+export interface IZaloBotIdentity {
+  ownId?: string;
+  names: string[];
+}
+
+export interface IZaloGroupAddressInput {
+  messageContent: string;
+  mentions?: IZaloGroupMention[];
+  identity: IZaloBotIdentity;
 }
 
 export interface IZaloResolveSenderNameInput {
