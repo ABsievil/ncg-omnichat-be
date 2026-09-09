@@ -13,6 +13,12 @@ export class ZaloSessionGetResponseDto extends DatabaseDto {
   ownId?: string | null;
 
   @ApiPropertyOptional()
+  ownDisplayName?: string | null;
+
+  @ApiPropertyOptional()
+  ownZaloName?: string | null;
+
+  @ApiPropertyOptional()
   proxy?: string | null;
 
   @ApiPropertyOptional()
