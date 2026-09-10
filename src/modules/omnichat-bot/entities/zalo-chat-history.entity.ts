@@ -36,3 +36,4 @@ export const ZaloChatHistorySchema = DatabaseSchema(ZaloChatHistoryEntity);
 export type ZaloChatHistoryDoc = IDatabaseDocument<ZaloChatHistoryEntity>;
 
 ZaloChatHistorySchema.index({ userId: 1, timestamp: -1 });
+ZaloChatHistorySchema.index({ threadId: 1, timestamp: -1 });
