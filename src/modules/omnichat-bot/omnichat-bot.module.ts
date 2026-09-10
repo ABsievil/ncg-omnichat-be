@@ -9,6 +9,7 @@ import {
 } from 'src/modules/omnichat-bot/entities/zalo-chat-history.entity';
 import { ZaloChatHistoryRepository } from 'src/modules/omnichat-bot/repositories/zalo-chat-history.repository';
 import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-bot.service';
+import { ZaloChatHistoryService } from 'src/modules/omnichat-bot/services/zalo-chat-history.service';
 
 @Module({
   imports: [
@@ -19,7 +20,16 @@ import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-b
     ZaloModule,
     AiAgentModule,
   ],
-  providers: [ZaloChatHistoryRepository, OmnichatBotService],
-  exports: [OmnichatBotService, ZaloChatHistoryRepository, MongooseModule],
+  providers: [
+    ZaloChatHistoryRepository,
+    ZaloChatHistoryService,
+    OmnichatBotService,
+  ],
+  exports: [
+    OmnichatBotService,
+    ZaloChatHistoryService,
+    ZaloChatHistoryRepository,
+    MongooseModule,
+  ],
 })
 export class OmnichatBotModule {}

@@ -12,17 +12,14 @@ import {
 } from 'src/modules/zalo/mappers/zalo-group-address.mapper';
 import { buildGroupMentionReply } from 'src/modules/zalo/mappers/zalo-message.mapper';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
-import { OMNICHAT_BOT_HISTORY_LIMIT } from 'src/modules/omnichat-bot/constants/omnichat-bot.constant';
-import { ZaloChatHistoryEntity } from 'src/modules/omnichat-bot/entities/zalo-chat-history.entity';
-import { ENUM_ZALO_CHAT_ROLE } from 'src/modules/omnichat-bot/enums/omnichat-bot.enum';
-import { ZaloChatHistoryRepository } from 'src/modules/omnichat-bot/repositories/zalo-chat-history.repository';
+import { ZaloChatHistoryService } from 'src/modules/omnichat-bot/services/zalo-chat-history.service';
 
 @Injectable()
 export class OmnichatBotService {
   private readonly logger = new Logger(OmnichatBotService.name);
 
   constructor(
-    private readonly zaloChatHistoryRepository: ZaloChatHistoryRepository,
+    private readonly zaloChatHistoryService: ZaloChatHistoryService,
     private readonly zaloService: ZaloService,
     private readonly aiAgentService: AiAgentService,
   ) {}
@@ -53,21 +50,15 @@ export class OmnichatBotService {
 
     const isGroup = message.type === ENUM_ZALO_THREAD_TYPE.GROUP;
     let botNames: string[] = [];
+    let isAddressed = true;
     if (isGroup) {
       const identity = await this.zaloService.getBotIdentity(shopId);
       botNames = identity.names;
-      if (
-        !isGroupBotAddressed({
-          messageContent: message.messageContent,
-          mentions: message.mentions,
-          identity,
-        })
-      ) {
-        this.logger.debug(
-          `Skip group message without bot address shop=${shopId} thread=${message.threadId} user=${message.userId} ownId=${identity.ownId ?? '-'} names=${identity.names.join('|') || '(empty)'}`,
-        );
-        return;
-      }
+      isAddressed = isGroupBotAddressed({
+        messageContent: message.messageContent,
+        mentions: message.mentions,
+        identity,
+      });
     }
 
     const senderName = await this.zaloService.resolveSenderName({
@@ -76,6 +67,20 @@ export class OmnichatBotService {
       type: message.type,
       userName: message.userName,
     });
+
+    if (isGroup && !isAddressed) {
+      await this.zaloChatHistoryService.saveUserMessage({
+        userId: message.userId,
+        threadId: message.threadId,
+        isGroup,
+        content: message.messageContent,
+        senderName,
+      });
+      this.logger.debug(
+        `Persist group message without bot address shop=${shopId} thread=${message.threadId} user=${message.userId} name=${senderName ?? '-'}`,
+      );
+      return;
+    }
 
     this.logger.log(
       `Process Zalo message shop=${shopId} user=${message.userId} name=${senderName ?? '-'} thread=${message.threadId} type=${message.type}`,
@@ -91,7 +96,11 @@ export class OmnichatBotService {
       return;
     }
 
-    const history = await this.getHistory(message.userId);
+    const history = await this.zaloChatHistoryService.getRecent({
+      userId: message.userId,
+      threadId: message.threadId,
+      isGroup,
+    });
     const userMessage = isGroup
       ? stripBotAddressFromContent(message.messageContent, botNames)
       : message.messageContent;
@@ -115,9 +124,10 @@ export class OmnichatBotService {
       reply,
     });
 
-    await this.saveHistoryPair({
+    await this.zaloChatHistoryService.saveHistoryPair({
       userId: message.userId,
       threadId: message.threadId,
+      isGroup,
       userContent: message.messageContent,
       assistantContent: reply,
       senderName,
@@ -152,48 +162,5 @@ export class OmnichatBotService {
       quote: input.message.quote,
       mentions: outgoing.mentions,
     });
-  }
-
-  private async getHistory(userId: string) {
-    const rows = await this.zaloChatHistoryRepository.findAll(
-      { userId },
-      {
-        order: { timestamp: -1 },
-        paging: { limit: OMNICHAT_BOT_HISTORY_LIMIT },
-      },
-    );
-
-    return rows.reverse().map((row) => ({
-      role: row.role,
-      content: row.content,
-      senderName: row.senderName ?? undefined,
-    }));
-  }
-
-  private async saveHistoryPair(input: {
-    userId: string;
-    threadId: string;
-    userContent: string;
-    assistantContent: string;
-    senderName?: string;
-  }): Promise<void> {
-    const now = new Date();
-    await this.zaloChatHistoryRepository.createMany([
-      {
-        userId: input.userId,
-        threadId: input.threadId,
-        role: ENUM_ZALO_CHAT_ROLE.USER,
-        content: input.userContent,
-        senderName: input.senderName ?? null,
-        timestamp: now,
-      } as ZaloChatHistoryEntity,
-      {
-        userId: input.userId,
-        threadId: input.threadId,
-        role: ENUM_ZALO_CHAT_ROLE.ASSISTANT,
-        content: input.assistantContent,
-        timestamp: new Date(now.getTime() + 1),
-      } as ZaloChatHistoryEntity,
-    ]);
   }
 }
