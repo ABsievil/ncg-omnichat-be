@@ -1,4 +1,5 @@
 import { Body, Controller, Headers, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'src/common/response/decorators/response.decorator';
 import { IResponse } from 'src/common/response/interfaces/response.interface';
 import { Public } from 'src/modules/auth/decorators/auth.public.decorator';
@@ -16,6 +17,7 @@ import { AuthService } from 'src/modules/auth/services/auth.service';
 export class AuthPublicController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Response('auth.otpRequest')
   @Post('otp/request')
   async requestOtp(
@@ -24,6 +26,7 @@ export class AuthPublicController {
     return { data: await this.authService.requestOtp(dto.phone) };
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Response('auth.otpVerify')
   @Post('otp/verify')
   async verifyOtp(
@@ -33,6 +36,7 @@ export class AuthPublicController {
     return { data: await this.authService.verifyOtpLogin(dto, userAgent) };
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Response('auth.register')
   @Post('register')
   async register(
@@ -42,6 +46,7 @@ export class AuthPublicController {
     return { data: await this.authService.register(dto, userAgent) };
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Response('auth.login')
   @Post('login')
   async login(

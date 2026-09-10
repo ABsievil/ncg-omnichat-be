@@ -8,6 +8,8 @@ export interface IRequestApp<T = any> extends Request {
     __language: string;
     __version: string;
     requestId?: string;
+    /** Resolved by TenantGuard: JWT shop for owners, explicit shop for admin. */
+    tenantShopId?: string;
 
     __pagination?: IPaginationRequestMetadata;
 }

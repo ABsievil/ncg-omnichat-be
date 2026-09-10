@@ -10,4 +10,8 @@ export interface IAiAgentInput {
   history: IAiAgentHistoryItem[];
   senderName?: string;
   isGroup?: boolean;
+  shopId?: string;
+  systemPrompt?: string;
+  kbFilterShopId?: string;
+  shopName?: string;
 }

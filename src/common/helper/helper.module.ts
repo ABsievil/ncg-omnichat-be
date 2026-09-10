@@ -51,10 +51,9 @@ export class HelperModule {
                     inject: [ConfigService],
                     imports: [ConfigModule],
                     useFactory: (configService: ConfigService) => ({
-                        secret:
-                            configService.get<string>(
-                                'helper.jwt.defaultSecretKey',
-                            ) ?? 'omnichat-default-secret',
+                        secret: configService.get<string>(
+                            'helper.jwt.defaultSecretKey',
+                        ),
                         signOptions: {
                             expiresIn:
                                 (configService.get<string>(

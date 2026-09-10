@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type Redis from 'ioredis';
 import { RedisService } from 'src/common/redis/services/redis.service';
+import { BotProfileService } from 'src/modules/bot-profile/services/bot-profile.service';
 import { OmnichatBotService } from 'src/modules/omnichat-bot/services/omnichat-bot.service';
 import {
   ZALO_REDIS_CHANNEL_SESSION_DISABLED,
@@ -31,6 +32,7 @@ export class ZaloListenerService implements OnModuleDestroy {
   constructor(
     private readonly zaloService: ZaloService,
     private readonly omnichatBotService: OmnichatBotService,
+    private readonly botProfileService: BotProfileService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
   ) {
@@ -96,7 +98,7 @@ export class ZaloListenerService implements OnModuleDestroy {
       this.stopListener(shopId, { keepIntentional: false });
 
       const api = await this.zaloService.loginWithSession(shopId, {
-        selfListen: false,
+        selfListen: true,
       });
 
       // Re-check after async login — disconnect may have raced in.
@@ -118,7 +120,10 @@ export class ZaloListenerService implements OnModuleDestroy {
       const messageHandler = async (message: unknown) => {
         this.logger.log(`Incoming Zalo event [shop=${shopId}]`);
         try {
-          await this.omnichatBotService.handleIncomingMessage(message, shopId);
+          const profile = await this.botProfileService.getOrCreate(shopId);
+          await this.omnichatBotService.handleIncomingMessage(message, shopId, {
+            profile,
+          });
         } catch (error) {
           this.logger.error(
             `Failed to process incoming Zalo message [shop=${shopId}]: ${String(error)}`,

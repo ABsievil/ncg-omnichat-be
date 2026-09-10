@@ -1,0 +1,8 @@
+{
+  "get": "Get bot profile success",
+  "update": "Update bot profile success",
+  "acceptZaloRisk": "Zalo risk warning accepted",
+  "error": {
+    "notFound": "Bot profile not found"
+  }
+}

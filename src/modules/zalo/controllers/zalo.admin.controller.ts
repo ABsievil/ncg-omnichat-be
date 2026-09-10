@@ -7,10 +7,17 @@ import {
   Query,
   Sse,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Observable, Subscriber } from 'rxjs';
 import { SkipRequestTimeout } from 'src/common/request/decorators/request.decorator';
 import { Response } from 'src/common/response/decorators/response.decorator';
 import { IResponse } from 'src/common/response/interfaces/response.interface';
+import { RequireTenantShop } from 'src/modules/auth/decorators/require-tenant-shop.decorator';
+import { Roles } from 'src/modules/auth/decorators/roles.decorator';
+import { ShopTenantProtected } from 'src/modules/auth/decorators/shop-tenant-protected.decorator';
+import { TenantShopId } from 'src/modules/auth/decorators/tenant-shop.decorator';
+import { BotProfileService } from 'src/modules/bot-profile/services/bot-profile.service';
+import { ENUM_USER_ROLE } from 'src/modules/user/enums/user.enum';
 import { ZaloLoginQrRequestDto } from 'src/modules/zalo/dtos/request/zalo.login-qr.request.dto';
 import { ZaloSendRequestDto } from 'src/modules/zalo/dtos/request/zalo.send.request.dto';
 import { ZaloSessionDisconnectRequestDto } from 'src/modules/zalo/dtos/request/zalo.session.disconnect.request.dto';
@@ -18,54 +25,71 @@ import { ZaloSessionUpsertRequestDto } from 'src/modules/zalo/dtos/request/zalo.
 import { ZaloSendResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.send.response.data.dto';
 import { ZaloSessionGetResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.get.response.data.dto';
 import { ZaloSessionListResponseDataDto } from 'src/modules/zalo/dtos/response/zalo.session.list.response.data.dto';
+import { ZaloSessionError } from 'src/modules/zalo/errors/zalo.session.error';
 import { ZaloService } from 'src/modules/zalo/services/zalo.service';
 
+@ShopTenantProtected()
 @Controller({ version: '1', path: '/zalo' })
 export class ZaloAdminController {
-  constructor(private readonly zaloService: ZaloService) {}
+  constructor(
+    private readonly zaloService: ZaloService,
+    private readonly botProfileService: BotProfileService,
+    private readonly zaloSessionError: ZaloSessionError,
+  ) {}
 
   @Response('zalo.list')
   @Get('/sessions')
   async listSessions(
-    @Query('shopId') shopId?: string,
+    @TenantShopId() shopId?: string,
   ): Promise<IResponse<ZaloSessionListResponseDataDto>> {
     const sessions = await this.zaloService.listSessions(shopId);
     return { data: this.zaloService.mapListData(sessions) };
   }
 
+  @RequireTenantShop()
   @Response('zalo.get')
   @Get('/sessions/detail')
   async getSession(
-    @Query('shopId') shopId: string,
+    @TenantShopId() shopId: string,
   ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
     const session = await this.zaloService.getSession(shopId);
     return { data: this.zaloService.mapGetData(session) };
   }
 
+  @RequireTenantShop()
   @Response('zalo.create')
   @Post('/sessions')
   async upsertSession(
+    @TenantShopId() shopId: string,
     @Body() dto: ZaloSessionUpsertRequestDto,
   ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
-    const session = await this.zaloService.upsertSession(dto);
+    const session = await this.zaloService.upsertSession({
+      ...dto,
+      shopId,
+    });
     return { data: this.zaloService.mapGetData(session) };
   }
 
+  @RequireTenantShop()
   @Response('zalo.disconnect')
   @Post('/sessions/disconnect')
   async disconnectSession(
-    @Body() dto: ZaloSessionDisconnectRequestDto,
+    @TenantShopId() shopId: string,
+    @Body() _dto: ZaloSessionDisconnectRequestDto,
   ): Promise<IResponse<ZaloSessionGetResponseDataDto>> {
-    const session = await this.zaloService.disconnectSession(dto.shopId);
+    const session = await this.zaloService.disconnectSession(shopId);
     return { data: this.zaloService.mapGetData(session) };
   }
 
+  @Roles(ENUM_USER_ROLE.ADMIN)
+  @RequireTenantShop()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Response('zalo.send')
   @Post('/send')
   async send(
+    @TenantShopId() shopId: string,
     @Body() dto: ZaloSendRequestDto,
   ): Promise<IResponse<ZaloSendResponseDataDto>> {
-    const shopId = await this.zaloService.resolveShopId(dto.shopId);
     const response = await this.zaloService.sendMessage({
       ...dto,
       shopId,
@@ -83,11 +107,18 @@ export class ZaloAdminController {
    * SSE QR login stream — 1 Zalo account / shop.
    * Events: qr | scanned | declined | expired | login_success | error
    */
+  @RequireTenantShop()
   @SkipRequestTimeout()
   @Sse('login-qr')
-  loginQr(
+  async loginQr(
+    @TenantShopId() shopId: string,
     @Query() query: ZaloLoginQrRequestDto,
-  ): Observable<MessageEvent> {
+  ): Promise<Observable<MessageEvent>> {
+    const profile = await this.botProfileService.getOrCreate(shopId);
+    if (!this.botProfileService.hasAcceptedZaloRisk(profile)) {
+      this.zaloSessionError.throwRiskNotAccepted();
+    }
+
     return new Observable((subscriber: Subscriber<MessageEvent>) => {
       let closed = false;
 
@@ -103,7 +134,7 @@ export class ZaloAdminController {
 
       void (async () => {
         try {
-          const { credentials, shopId } = await this.zaloService.loginQr(
+          const { credentials } = await this.zaloService.loginQr(
             qrEvent => {
               switch (qrEvent.type) {
                 case 0:
@@ -136,7 +167,7 @@ export class ZaloAdminController {
               }
             },
             {
-              shopId: query.shopId,
+              shopId,
               proxy: query.proxy,
             },
           );

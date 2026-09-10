@@ -10,6 +10,9 @@ import { ENUM_ZALO_CHAT_ROLE } from 'src/modules/omnichat-bot/enums/omnichat-bot
 @DatabaseEntity({ collection: 'zalo_chat_history' })
 export class ZaloChatHistoryEntity extends DatabaseEntityBase {
   @DatabaseProp({ required: true, index: true })
+  shopId!: string;
+
+  @DatabaseProp({ required: true, index: true })
   userId!: string;
 
   @DatabaseProp({ required: true, index: true })
@@ -35,4 +38,6 @@ export class ZaloChatHistoryEntity extends DatabaseEntityBase {
 export const ZaloChatHistorySchema = DatabaseSchema(ZaloChatHistoryEntity);
 export type ZaloChatHistoryDoc = IDatabaseDocument<ZaloChatHistoryEntity>;
 
+ZaloChatHistorySchema.index({ shopId: 1, userId: 1, timestamp: -1 });
+ZaloChatHistorySchema.index({ shopId: 1, threadId: 1, timestamp: -1 });
 ZaloChatHistorySchema.index({ userId: 1, timestamp: -1 });

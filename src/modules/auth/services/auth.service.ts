@@ -17,6 +17,7 @@ import { AuthTokenResponseDto } from 'src/modules/auth/dtos/response/auth.token.
 import { IAuthTokenPayload } from 'src/modules/auth/interfaces/auth.user.interface';
 import { AuthSessionService } from 'src/modules/auth/services/auth.session.service';
 import { OtpService } from 'src/modules/auth/services/otp.service';
+import { BotProfileService } from 'src/modules/bot-profile/services/bot-profile.service';
 import { ShopService } from 'src/modules/shop/services/shop.service';
 import {
   ENUM_USER_GENDER,
@@ -34,6 +35,7 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly userService: UserService,
     private readonly shopService: ShopService,
+    private readonly botProfileService: BotProfileService,
     private readonly helperHashService: HelperHashService,
     private readonly helperEncryptionService: HelperEncryptionService,
     private readonly configService: ConfigService,
@@ -86,7 +88,7 @@ export class AuthService {
       passwordHash,
       displayName: dto.displayName,
       shopId: null,
-      role: ENUM_USER_ROLE.USER,
+      role: ENUM_USER_ROLE.OWNER,
       gender: ENUM_USER_GENDER.UNKNOWN,
       bio: '',
       statusText: '',
@@ -113,7 +115,7 @@ export class AuthService {
         phone,
         displayName: phone,
         shopId: null,
-        role: ENUM_USER_ROLE.USER,
+        role: ENUM_USER_ROLE.OWNER,
         gender: ENUM_USER_GENDER.UNKNOWN,
         bio: '',
         statusText: '',
@@ -226,8 +228,8 @@ export class AuthService {
   private async ensureUserShopAndRole(user: UserDoc): Promise<UserDoc> {
     let dirty = false;
 
-    if (!user.role) {
-      user.role = ENUM_USER_ROLE.USER;
+    if (!user.role || user.role === ENUM_USER_ROLE.USER) {
+      user.role = ENUM_USER_ROLE.OWNER;
       dirty = true;
     }
 
@@ -253,6 +255,12 @@ export class AuthService {
     if (dirty) {
       await this.userRepository.save(user);
     }
+    if (user.shopId) {
+      await this.botProfileService.ensure(
+        user.shopId,
+        user.displayName?.trim() || user.phone,
+      );
+    }
     return user;
   }
 
@@ -265,7 +273,7 @@ export class AuthService {
       userId: user._id,
       phone: user.phone,
       shopId: user.shopId ?? null,
-      role: user.role ?? ENUM_USER_ROLE.USER,
+      role: user.role ?? ENUM_USER_ROLE.OWNER,
       sessionId,
     });
 
@@ -296,9 +304,10 @@ export class AuthService {
     role: ENUM_USER_ROLE;
     sessionId: string;
   }) {
-    const secret =
-      this.configService.get<string>('helper.jwt.defaultSecretKey') ??
-      'omnichat-default-secret';
+    const secret = this.configService.get<string>('helper.jwt.defaultSecretKey');
+    if (!secret) {
+      throw new Error('HELPER_JWT_SECRET_KEY is not configured');
+    }
     const accessExpired =
       this.configService.get<string>('helper.jwt.defaultExpirationTime') ??
       '1h';

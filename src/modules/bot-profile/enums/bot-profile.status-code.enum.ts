@@ -1,0 +1,3 @@
+export enum ENUM_BOT_PROFILE_STATUS_CODE {
+  NOT_FOUND = 5500,
+}

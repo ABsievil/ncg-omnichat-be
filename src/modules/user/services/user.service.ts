@@ -38,6 +38,12 @@ export class UserService {
     return this.userRepository.save(user);
   }
 
+  async assignShop(userId: string, shopId: string): Promise<UserDoc> {
+    const user = await this.findById(userId);
+    user.shopId = shopId;
+    return this.userRepository.save(user);
+  }
+
   mapGet(user: UserDoc): UserGetResponseDto {
     return {
       _id: String(user._id),
