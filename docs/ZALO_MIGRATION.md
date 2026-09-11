@@ -242,6 +242,7 @@ ZILLIZ_TOP_K=4
 | **P4** | Module `knowledge`: Milvus search + embeddings | Gọi `search("...")` trả về hits từ `smart_go_knowledge_v5` |
 | **P5** | Module `ai-agent`: LangChain AgentExecutor + persona prompt; ráp full flow thay workflow | Nhắn hỏi SmartGo → trả lời RAG; hỏi ngoài phạm vi → fallback lịch sự |
 | **P6** | Vận hành: deploy worker single-instance, health/alert session hết hạn, gỡ tài liệu/hạ tầng n8n | Chạy ổn định thay n8n; tắt workflow n8n |
+| **P7+** | Media inbound/outbound (sticker, ảnh, file, voice) — bot hiểu câu hỏi không chỉ text | Xem `docs/BOT_MEDIA_REPLY_PLAN.md` |
 
 ---
 
