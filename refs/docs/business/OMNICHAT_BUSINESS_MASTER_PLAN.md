@@ -2,9 +2,11 @@
 
 > **Nền tảng CSKH đa kênh tích hợp Chatbot AI vào nhóm Zalo và các nền tảng MXH chat**
 >
-> Phiên bản: 1.0 — Tháng 09/2026
+> Phiên bản: 1.1 — Tháng 09/2026
 > Trạng thái: Đã xác thực tính khả thi kỹ thuật (POC chatbot trong nhóm Zalo thành công)
 > Phạm vi: Tài liệu business chuyên sâu — bối cảnh thị trường, tiềm năng, cơ hội, kế hoạch, phương hướng triển khai và toàn bộ thông tin nền tảng của dự án.
+>
+> **Lưu ý phạm vi chia sẻ**: tài liệu này được biên soạn để có thể chia sẻ cho đối tác, nhà đầu tư, nhân sự mới. Toàn bộ chi tiết kỹ thuật, kiến trúc hệ thống, đường tích hợp API và bí quyết triển khai được tách sang phụ lục riêng **`OMNICHAT_CONFIDENTIAL_TECH_APPENDIX.md` (tài liệu mật — không chia sẻ ra ngoài nhóm sáng lập/kỹ sư core)**.
 
 ---
 
@@ -19,7 +21,7 @@
 7. [Mô hình kinh doanh & Chính sách giá](#7-mô-hình-kinh-doanh--chính-sách-giá)
 8. [Chiến lược Go-to-Market](#8-chiến-lược-go-to-market)
 9. [Lộ trình triển khai theo giai đoạn](#9-lộ-trình-triển-khai-theo-giai-đoạn)
-10. [Nền tảng công nghệ & Kiến trúc kỹ thuật](#10-nền-tảng-công-nghệ--kiến-trúc-kỹ-thuật)
+10. [Nền tảng công nghệ (tổng quan)](#10-nền-tảng-công-nghệ-tổng-quan)
 11. [Pháp lý & Tuân thủ](#11-pháp-lý--tuân-thủ)
 12. [Phân tích rủi ro & Phương án giảm thiểu](#12-phân-tích-rủi-ro--phương-án-giảm-thiểu)
 13. [Kế hoạch tài chính & Unit Economics](#13-kế-hoạch-tài-chính--unit-economics)
@@ -40,7 +42,7 @@ Trong thời đại số, khối lượng yêu cầu hỗ trợ khách hàng tă
 ### 1.2. Tình trạng dự án
 
 - **Đã hoàn thành POC**: chatbot đã được tích hợp thành công vào nhóm Zalo, trò chuyện với thành viên nhóm theo thời gian thực. Tính khả thi kỹ thuật được xác nhận.
-- **Đã có nền tảng backend**: hệ thống backend Omnichat (NestJS + MongoDB + Redis) đã được dựng khung theo kiến trúc sạch, sẵn sàng phát triển các module nghiệp vụ.
+- **Đã có nền tảng backend**: hệ thống backend Omnichat đã được dựng khung theo kiến trúc hiện đại, sẵn sàng phát triển các module nghiệp vụ.
 - **Điều kiện nền tảng thuận lợi**: từ 2025, Zalo chính thức mở **API Quản lý nhóm (GMF — Group Management Function)** cho Official Account gói Nâng cao/Premium, cho phép tạo nhóm, quản lý nhóm và gửi tin nhắn vào nhóm qua OpenAPI. Tin OA gửi vào nhóm GMF **miễn phí đến 31/12/2026** — cửa sổ vàng để chiếm lĩnh thị trường với chi phí tin nhắn gần bằng 0.
 
 ### 1.3. Con số thị trường then chốt
@@ -95,7 +97,7 @@ Trong thời đại số, khối lượng yêu cầu hỗ trợ khách hàng tă
 
 ### 2.4. Tại sao là bây giờ? (Why Now)
 
-1. **Zalo vừa mở API nhóm chính thức (GMF)** — trước đây về mặt kỹ thuật, đường chính thống không tồn tại; nay OA gói Nâng cao/Premium có thể tạo nhóm, quản lý nhóm và gửi tin vào nhóm qua OpenAPI (`openapi.zalo.me/v3.0/oa/group/*`). Ai vào sớm sẽ chiếm lĩnh mindshare.
+1. **Zalo vừa mở API nhóm chính thức (GMF)** — trước đây về mặt kỹ thuật, đường chính thống không tồn tại; nay OA gói Nâng cao/Premium có thể tạo nhóm, quản lý nhóm và gửi tin vào nhóm qua OpenAPI chính thức. Ai vào sớm sẽ chiếm lĩnh mindshare.
 2. **Tin nhắn nhóm GMF đang miễn phí đến 31/12/2026** — giai đoạn vàng để khách hàng dùng thử không rào cản chi phí tin nhắn, và để Omnichat xây tập khách hàng trước khi Zalo thu phí.
 3. **LLM tiếng Việt đủ tốt và đủ rẻ** để chatbot trả lời tự nhiên, không còn là "bot kịch bản cứng" gây ức chế như thế hệ chatbot 2018–2021.
 4. **POC đã thành công** — rủi ro kỹ thuật lớn nhất (bot hoạt động được trong nhóm Zalo) đã được loại bỏ.
@@ -197,27 +199,20 @@ Omnichat gồm 4 lớp năng lực chính:
 
 ### 5.2. Tính năng "ngôi sao": Chatbot AI trong nhóm Zalo
 
-**Luồng hoạt động:**
+**Trải nghiệm từ góc nhìn khách hàng (doanh nghiệp):**
 
-1. Doanh nghiệp kết nối Zalo OA (gói Nâng cao/Premium) với Omnichat.
-2. Omnichat tạo/kết nối các nhóm GMF qua OpenAPI (`/v3.0/oa/group/creategroupwithoa`, quản lý qua `group_id`).
-3. Khách hàng nhắn trong nhóm → webhook đẩy sự kiện về Omnichat → engine AI phân tích:
-   - Câu hỏi thuộc tri thức doanh nghiệp (FAQ, chính sách, sản phẩm) → **bot trả lời ngay trong nhóm** (`POST /v3.0/oa/group/message`).
-   - Câu hỏi phức tạp / khiếu nại / cảm xúc tiêu cực → **escalate**: gắn tag, thông báo cho nhân viên phụ trách, bot trả lời giữ nhịp ("Em đã ghi nhận, anh A sẽ hỗ trợ mình trong ít phút ạ").
-4. Toàn bộ hội thoại đồng bộ về Unified Inbox để nhân viên theo dõi, tiếp quản, và hệ thống đo lường.
+1. Doanh nghiệp kết nối Zalo OA (gói Nâng cao/Premium) với Omnichat và chọn các nhóm muốn bật trợ lý.
+2. Khách hàng nhắn trong nhóm, trợ lý AI phân tích và xử lý:
+   - Câu hỏi thuộc tri thức doanh nghiệp (FAQ, chính sách, sản phẩm) → **bot trả lời ngay trong nhóm**, 24/7.
+   - Câu hỏi phức tạp / khiếu nại / cảm xúc tiêu cực → **chuyển cho người thật**: thông báo nhân viên phụ trách, bot trả lời giữ nhịp ("Em đã ghi nhận, anh A sẽ hỗ trợ mình trong ít phút ạ").
+3. Toàn bộ hội thoại đồng bộ về Unified Inbox để nhân viên theo dõi, tiếp quản, và hệ thống đo lường.
 
-**Cơ chế AI (RAG — Retrieval-Augmented Generation):**
+**AI trả lời theo tri thức riêng của từng doanh nghiệp:**
 
-- Doanh nghiệp nạp tri thức: file giá, chính sách, tài liệu hướng dẫn, lịch sử Q&A.
-- Câu hỏi của khách được embedding → truy hồi ngữ cảnh liên quan → LLM sinh câu trả lời có kiểm soát (guardrails: không bịa giá, không hứa hẹn ngoài chính sách, từ chối lịch sự khi ngoài phạm vi).
-- Học liên tục: câu bot trả lời sai được nhân viên sửa → đưa vào tập tri thức.
+- Doanh nghiệp nạp tri thức: file giá, chính sách, tài liệu hướng dẫn, lịch sử Q&A — bot chỉ trả lời dựa trên nguồn này, có cơ chế kiểm soát để không bịa thông tin và từ chối lịch sự khi câu hỏi ngoài phạm vi.
+- Học liên tục: câu bot trả lời chưa tốt được nhân viên sửa và hệ thống ghi nhớ cho các lần sau.
 
-**Trải nghiệm đặc thù cho ngữ cảnh "nhóm" (khác biệt với chat 1-1):**
-
-- Nhận diện khi nào bot **nên im lặng** (thành viên đang nói chuyện với nhau, không phải hỏi doanh nghiệp).
-- Kích hoạt bằng mention/từ khóa hoặc chế độ chủ động có kiểm soát tần suất (anti-spam).
-- Phân biệt vai trò trong nhóm: khách hàng vs nhân viên nội bộ vs quản trị viên.
-- Rate-limit và quiet-hours theo cấu hình từng nhóm.
+**Được thiết kế riêng cho ngữ cảnh "nhóm" (khác biệt với chat 1-1):** bot hiểu khi nào nên trả lời và khi nào nên im lặng, không làm phiền hội thoại giữa các thành viên, không spam, phân biệt được khách hàng với nhân viên nội bộ. Đây là lớp know-how vận hành quan trọng nhất của sản phẩm (chi tiết thuộc phụ lục kỹ thuật mật).
 
 ### 5.3. Danh mục tính năng theo phiên bản
 
@@ -258,10 +253,10 @@ Omnichat gồm 4 lớp năng lực chính:
 
 ### 6.2. Các câu hỏi cần trả lời tiếp theo (từ POC → sản phẩm)
 
-1. **Chuẩn hóa đường tích hợp chính thống**: chuyển toàn bộ luồng sang Zalo OA + GMF OpenAPI (nếu POC đang dùng đường tích hợp không chính thức qua tài khoản cá nhân — xem phân tích rủi ro mục 12.1) để đảm bảo tính bền vững pháp lý và kỹ thuật.
-2. **Độ ổn định ở quy mô**: webhook throughput, độ trễ trả lời (< 3–5 giây là ngưỡng trải nghiệm tốt), xử lý đồng thời hàng trăm nhóm.
+1. **Chuẩn hóa hạ tầng sản xuất**: chuyển từ môi trường thử nghiệm POC sang nền tảng vận hành chuẩn thương mại, bền vững về pháp lý và kỹ thuật (chi tiết lộ trình chuyển đổi thuộc phụ lục kỹ thuật mật).
+2. **Độ ổn định ở quy mô**: tốc độ phản hồi (< 3–5 giây là ngưỡng trải nghiệm tốt), xử lý đồng thời hàng trăm nhóm.
 3. **Chất lượng AI theo ngành**: đo tỷ lệ trả lời đúng trên tập câu hỏi thật của 2–3 ngành beachhead trước khi bán rộng.
-4. **Hành vi trong nhóm đông người**: chống spam, chống loop bot-trả-lời-bot, kiểm soát bot nói đúng lúc.
+4. **Hành vi trong nhóm đông người**: đảm bảo bot nói đúng lúc, đúng người, không gây phiền.
 
 ### 6.3. Tiêu chí "gate" chuyển giai đoạn
 
@@ -292,7 +287,7 @@ Omnichat gồm 4 lớp năng lực chính:
 | Hỗ trợ | Cộng đồng | Ưu tiên | Chuyên viên | Dedicated + on-premise option |
 
 - **Dùng thử 14 ngày** đầy đủ tính năng gói Growth, không cần thẻ.
-- Vượt hạn mức AI: ~200–300đ/lượt trả lời (biên ≥ 60% trên chi phí LLM).
+- Vượt hạn mức AI: ~200–300đ/lượt trả lời.
 - Ghi chú: khách hàng tự trả phí gói Zalo OA Nâng cao/Premium và gói GMF cho Zalo (theo bảng giá Zalo Cloud: OA Nâng cao ~1,07 triệu/năm; GMF từ 25.000–300.000đ/gói/tháng tùy số nhóm) — Omnichat hướng dẫn đăng ký, minh bạch chi phí tổng sở hữu.
 
 ### 7.3. Logic ARPU & mở rộng doanh thu
@@ -342,10 +337,11 @@ Truy cập website/landing  →  Đăng ký dùng thử  →  Kết nối OA + n
 
 ### Giai đoạn 0 — Củng cố nền móng (hiện tại)
 
-- Chuẩn hóa tích hợp Zalo OA + GMF OpenAPI (webhook nhóm, gửi tin nhóm, quản lý `group_id`, refresh token).
-- Hoàn thiện backend Omnichat: module `conversation`, `client`, `session`, connector Zalo; hạ tầng queue xử lý webhook (Redis).
-- Dựng engine AI v0: pipeline RAG (nạp tài liệu → embedding → truy hồi → sinh trả lời có guardrails).
-- **Exit criteria**: 1 nhóm Zalo demo chạy ổn định 2 tuần liên tục qua đường API chính thức, độ trễ trả lời < 5 giây.
+- Hoàn thiện tích hợp Zalo chính thức (OA + GMF) đạt chuẩn vận hành thương mại.
+- Hoàn thiện nền tảng backend Omnichat cho các module nghiệp vụ cốt lõi.
+- Dựng engine AI phiên bản đầu: trả lời theo tri thức doanh nghiệp, có cơ chế kiểm soát chất lượng.
+- (Danh sách việc kỹ thuật chi tiết: xem phụ lục kỹ thuật mật.)
+- **Exit criteria**: 1 nhóm Zalo demo chạy ổn định 2 tuần liên tục qua đường tích hợp chính thức, độ trễ trả lời < 5 giây.
 
 ### Giai đoạn 1 — MVP + Pilot
 
@@ -376,62 +372,23 @@ Truy cập website/landing  →  Đăng ký dùng thử  →  Kết nối OA + n
 
 ---
 
-## 10. NỀN TẢNG CÔNG NGHỆ & KIẾN TRÚC KỸ THUẬT
+## 10. NỀN TẢNG CÔNG NGHỆ (TỔNG QUAN)
 
-### 10.1. Hiện trạng codebase
+> Toàn bộ chi tiết kỹ thuật — kiến trúc hệ thống, công nghệ sử dụng, đường tích hợp API, cơ chế AI và bí quyết triển khai — được quản lý trong tài liệu riêng **`OMNICHAT_CONFIDENTIAL_TECH_APPENDIX.md` (mật, truy cập theo nguyên tắc need-to-know)**. Mục này chỉ trình bày ở mức cam kết năng lực để phục vụ đánh giá business.
 
-Backend Omnichat đã được khởi tạo theo chuẩn kiến trúc sạch:
+### 10.1. Năng lực nền tảng đã sẵn sàng
 
-- **Stack**: NestJS (TypeScript), MongoDB (Mongoose), Redis; cấu trúc module hóa `src/app`, `src/common` (database, helper, request, response...), `src/router`, `src/configs`, đa ngôn ngữ `src/languages` (vi/en).
-- **Đã có sẵn**: config tập trung qua `ConfigService`, middleware pipeline chuẩn, repository base cho database, chuẩn response/exception thống nhất, hạ tầng Redis, khung tích hợp Firebase/R2/PubSub.
-- Quy tắc phát triển tuân theo `refs/docs/AI_CLEAN_CODE_RULES.md` (naming theo domain Omnichat: `omnichat`, `session`, `client`, `conversation`).
+- Backend đã được dựng khung theo kiến trúc hiện đại, module hóa, đa ngôn ngữ (vi/en), sẵn sàng mở rộng cho các module nghiệp vụ.
+- Thiết kế đa khách hàng (multi-tenant) ngay từ đầu — nhiều doanh nghiệp vận hành an toàn trên cùng hạ tầng, có đường nâng cấp riêng cho khách Enterprise.
+- Kiến trúc kết nối kênh dạng mô-đun: thêm kênh mới (Messenger, Telegram...) không ảnh hưởng kênh đang chạy — giá trị nền tảng không phụ thuộc một kênh duy nhất.
+- AI được thiết kế theo hướng độc lập nhà cung cấp, tối ưu đồng thời chất lượng và chi phí.
 
-### 10.2. Kiến trúc mục tiêu (high-level)
+### 10.2. Cam kết chất lượng dịch vụ (mức business)
 
-```
-                    ┌──────────────────────────────┐
-   Zalo GMF webhook │                              │   Web App (Inbox,
-   Messenger webhook│      API GATEWAY (NestJS)    │◄── Dashboard, Cấu hình)
-   Telegram webhook ├──────────────────────────────┤
-                    │  Channel Connector Services  │
-                    │  (zalo / messenger / ...)    │
-                    └──────────┬───────────────────┘
-                               │ enqueue (Redis Queue)
-                    ┌──────────▼───────────────────┐
-                    │   CONVERSATION ENGINE        │
-                    │  - Session & context manager │
-                    │  - Routing rules / escalate  │
-                    └──────────┬───────────────────┘
-                               │
-                ┌──────────────┼──────────────────┐
-                ▼              ▼                  ▼
-        ┌────────────┐  ┌────────────┐  ┌───────────────┐
-        │ AI SERVICE │  │  INBOX &   │  │  ANALYTICS    │
-        │ RAG + LLM  │  │  AGENT API │  │  & REPORTING  │
-        │ guardrails │  └────────────┘  └───────────────┘
-        └─────┬──────┘
-              ▼
-     Vector store (tri thức DN)     MongoDB (hội thoại, khách, cấu hình)
-     LLM providers (đa nhà cung    Redis (cache, queue, rate-limit)
-     cấp, failover)                Object storage (R2 — file, media)
-```
-
-### 10.3. Quyết định kiến trúc then chốt
-
-| Quyết định | Lựa chọn | Lý do |
-|---|---|---|
-| Xử lý webhook | Queue-based (Redis), xử lý bất đồng bộ | Webhook Zalo yêu cầu phản hồi nhanh; chịu tải burst khi nhiều nhóm hoạt động đồng thời |
-| LLM | Trừu tượng hóa đa nhà cung cấp (adapter pattern) | Tránh khóa chặt 1 vendor; tối ưu chi phí/chất lượng theo tác vụ (câu ngắn dùng model rẻ) |
-| Multi-tenancy | Logical isolation theo `client` ngay từ đầu | SaaS nhiều doanh nghiệp trên cùng hạ tầng; sẵn đường nâng cấp dedicated cho Enterprise |
-| Dữ liệu hội thoại | Lưu đầy đủ + TTL/archive theo gói | Vừa phục vụ phân tích, vừa kiểm soát chi phí lưu trữ và tuân thủ dữ liệu cá nhân |
-| Bảo mật | Mã hóa AES đã có sẵn khung; secrets qua env; audit log từ V2 | Chuẩn bị cho yêu cầu bảo vệ dữ liệu cá nhân (mục 11) |
-
-### 10.4. Chỉ tiêu kỹ thuật (SLO mục tiêu)
-
-- Độ trễ bot trả lời (webhook → tin gửi vào nhóm): **p50 < 3s, p95 < 8s**.
-- Uptime nền tảng: **99,5%** (MVP) → **99,9%** (thương mại).
-- Throughput: 50 tin/giây (MVP) → 500 tin/giây (Giai đoạn 3) với horizontal scaling worker.
-- Chi phí LLM/lượt trả lời: **< 100đ trung bình** (mix model + cache câu hỏi trùng).
+- Bot phản hồi trong vài giây, hoạt động 24/7.
+- Độ sẵn sàng nền tảng mục tiêu: 99,5% (MVP) → 99,9% (giai đoạn thương mại).
+- Khả năng mở rộng phục vụ đồng thời hàng trăm đến hàng nghìn nhóm chat.
+- Chi phí vận hành AI được kiểm soát để đảm bảo biên lợi nhuận gộp mục tiêu ≥ 75% (mục 13.2).
 
 ---
 
@@ -464,10 +421,10 @@ Backend Omnichat đã được khởi tạo theo chuẩn kiến trúc sạch:
 | # | Rủi ro | Xác suất | Tác động | Giảm thiểu |
 |---|---|:---:|:---:|---|
 | R1 | **Phụ thuộc nền tảng Zalo** — thay đổi chính sách API/GMF, thu phí cao, giới hạn quyền | Trung bình | **Rất cao** | Chỉ dùng API chính thức; quan hệ đối tác với Zalo Cloud; kiến trúc connector đa kênh để giá trị không phụ thuộc 1 kênh; theo dõi chính sách hàng quý |
-| R2 | POC dựa trên đường tích hợp không chính thức, không chuyển đổi được sang GMF đầy đủ tính năng | Trung bình | Cao | Ưu tiên số 1 của Giai đoạn 0: xác thực toàn bộ tính năng cần thiết trên GMF OpenAPI; thiết kế fallback (bot phản hồi qua OA 1-1 kèm điều hướng) cho tính năng nhóm chưa hỗ trợ |
+| R2 | Chuyển đổi từ môi trường POC sang môi trường sản xuất không giữ được đầy đủ tính năng | Trung bình | Cao | Ưu tiên số 1 của Giai đoạn 0: xác thực toàn bộ tính năng cần thiết trên đường tích hợp chính thức; có phương án dự phòng cho tính năng chưa được nền tảng hỗ trợ (chi tiết tại phụ lục kỹ thuật mật) |
 | R3 | Đối thủ lớn (Pancake, Haravan, FPT.AI) copy tính năng | Cao | Trung bình | Chạy nhanh trong 12–24 tháng cửa sổ; xây moat = dữ liệu tri thức theo ngành + chi phí chuyển đổi (tri thức đã nạp, quy trình đã quen) + quan hệ khách hàng |
-| R4 | Chất lượng AI không đạt — bot trả lời sai gây thiệt hại cho khách | Trung bình | Cao | Guardrails chặt (không bịa số liệu, citation nguồn); chế độ duyệt trước; giới hạn phạm vi trả lời; bảo hiểm bằng escalate nhanh; đo lường tỷ lệ đúng liên tục |
-| R5 | Chi phí LLM bào mòn biên lợi nhuận | Trung bình | Trung bình | Hạn mức theo gói + tính phí vượt; cache; định tuyến model theo độ khó; đàm phán giá volume |
+| R4 | Chất lượng AI không đạt — bot trả lời sai gây thiệt hại cho khách | Trung bình | Cao | Kiểm soát chất lượng AI nhiều tầng; chế độ duyệt trước; giới hạn phạm vi trả lời; bảo hiểm bằng escalate nhanh; đo lường tỷ lệ đúng liên tục |
+| R5 | Chi phí LLM bào mòn biên lợi nhuận | Trung bình | Trung bình | Hạn mức theo gói + tính phí vượt; bộ kỹ thuật tối ưu chi phí AI (chi tiết tại phụ lục kỹ thuật mật); đàm phán giá volume |
 | R6 | Bán chậm — SME Việt ngại trả phí SaaS | Trung bình | Cao | Giá vào cửa thấp (399k), dùng thử không thẻ, chứng minh ROI bằng con số trong 14 ngày; kênh đại lý địa phương |
 | R7 | Rủi ro dữ liệu cá nhân / sự cố bảo mật | Thấp | Rất cao | Thực thi mục 11.2 từ MVP; pentest trước thương mại hóa; quy trình ứng cứu sự cố |
 | R8 | Phụ thuộc founder (bus factor) | Cao | Cao | Tài liệu hóa (như tài liệu này + tài liệu kỹ thuật); tuyển sớm 1 kỹ sư core; code review + CI/CD chuẩn |
@@ -531,7 +488,7 @@ Backend Omnichat đã được khởi tạo theo chuẩn kiến trúc sạch:
 
 - Founder — sản phẩm, kiến trúc, bán hàng pilot (kiêm nhiệm).
 - 1 Fullstack/Backend engineer — connector kênh, inbox, hạ tầng.
-- 1 AI engineer (có thể part-time/cộng tác) — pipeline RAG, đánh giá chất lượng.
+- 1 AI engineer (có thể part-time/cộng tác) — engine AI, đánh giá chất lượng.
 - (Tùy chọn) 1 CS/Operations part-time — onboarding pilot, thu thập phản hồi.
 
 **Giai đoạn 2 (6–10 người):** +2 engineer, +1 product designer, +2 sales/CS, +1 content marketing.
@@ -575,7 +532,7 @@ Backend Omnichat đã được khởi tạo theo chuẩn kiến trúc sạch:
 
 **Vận hành & Kỹ thuật**
 
-- Uptime ≥ 99,5%; tỷ lệ webhook xử lý thành công ≥ 99,9%; chi phí LLM/lượt trả lời < 100đ.
+- Uptime ≥ 99,5%; tỷ lệ tin nhắn xử lý thành công ≥ 99,9%; chi phí AI/lượt trả lời trong ngưỡng mục tiêu (chi tiết tại phụ lục kỹ thuật mật).
 
 ### 15.3. Nhịp đánh giá
 
@@ -596,7 +553,7 @@ Backend Omnichat đã được khởi tạo theo chuẩn kiến trúc sạch:
 | Zalo dẫn đầu messaging VN: 81% penetration Q4/2025 (Facebook 65%, TikTok 21%); Top 9 messaging toàn cầu (Cloudflare Radar) | Decision Lab "The Connected Consumer", báo cáo tháng 2/2026 |
 | Thị trường chatbot VN: 37 triệu USD (2025) → 213,3 triệu USD (2034), CAGR 21,5% | IMARC Group — Vietnam Chatbot Market |
 | Thị trường Conversational AI VN: 64,3 triệu USD (2025) → 268,8 triệu USD (2034) | IMARC Group — Vietnam Conversational AI Market |
-| API nhóm chat GMF: điều kiện OA Nâng cao/Premium, endpoint `openapi.zalo.me/v3.0/oa/group/*` | Zalo Platform Document Hub (docs.zaloplatforms.com) |
+| Tính năng nhóm chat GMF: điều kiện OA Nâng cao/Premium, hỗ trợ quản lý và nhắn tin nhóm qua API chính thức | Zalo Platform Document Hub (docs.zaloplatforms.com) |
 | Bảng giá OA từ 01/01/2026: OA Nâng cao ~1,068 triệu đ/năm; GMF 25k–300k đ/gói/tháng; **tin OA gửi nhóm GMF miễn phí đến 31/12/2026** | Bảng giá dịch vụ Zalo OA 01/2026 (content.zalo.cloud) |
 
 ### 16.2. Thuật ngữ
@@ -616,6 +573,7 @@ Backend Omnichat đã được khởi tạo theo chuẩn kiến trúc sạch:
 
 ### 16.3. Tài liệu liên quan trong repo
 
+- **`refs/docs/business/OMNICHAT_CONFIDENTIAL_TECH_APPENDIX.md`** — phụ lục kỹ thuật & bí mật triển khai (**MẬT** — chỉ nhóm sáng lập/kỹ sư core, cấp quyền theo need-to-know sau NDA; không đính kèm khi chia sẻ tài liệu này).
 - `refs/docs/AI_CLEAN_CODE_RULES.md` — quy tắc phát triển codebase.
 - `refs/docs/AUDIT_BASE_SETUP.md` — hiện trạng nền tảng kỹ thuật.
 - (Sẽ bổ sung) `refs/docs/business/` — nghiên cứu ngành theo beachhead, playbook bán hàng, tài liệu gọi vốn (pitch deck) trích xuất từ tài liệu này.
@@ -627,3 +585,4 @@ Backend Omnichat đã được khởi tạo theo chuẩn kiến trúc sạch:
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 09/2026 | Khởi tạo tài liệu tổng thể sau khi POC chatbot nhóm Zalo thành công |
+| 1.1 | 09/2026 | Tách toàn bộ chi tiết kỹ thuật & bí mật triển khai sang phụ lục mật `OMNICHAT_CONFIDENTIAL_TECH_APPENDIX.md` để tài liệu này có thể chia sẻ rộng |
